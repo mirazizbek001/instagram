@@ -163,11 +163,18 @@ function Auth({ A, accessInfo }) {
   const postJson = async (url, body) => {
     const send = token => fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token }, body: JSON.stringify(body) })
     let response = await send(await ensureCsrfToken())
-    if (response.status === 403) response = await send(await ensureCsrfToken(true)) // eskirgan CSRF cookie bo'lsa — yangilab, qayta yuboradi
+    if (response.status === 403) {
+      const result = await response.clone().json().catch(() => ({}))
+      if (/csrf failed/i.test(result.detail || '')) response = await send(await ensureCsrfToken(true))
+    }
     return response
   }
   const go = async e => {
     e.preventDefault(); setErr('')
+    if (reg && accessInfo?.open === false) {
+      setErr(`Platforma yopiq. Admin bo‘lsangiz, “Kirish” rejimini tanlang. Ro‘yxatdan o‘tish ${accessInfo.start || '08:00'}–${accessInfo.end || '22:00'} oralig‘ida mumkin.`)
+      return
+    }
     const token = await ensureCsrfToken()
     if (!token) {
       setErr('Server hozir javob bermayapti (ishga tushayotgan bo‘lishi mumkin). Bir necha soniyadan keyin qayta bosing.')

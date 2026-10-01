@@ -825,7 +825,7 @@ export function AppProvider({ children }) {
     return () => { active = false; clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible) }
   }, [meId, socialReadyUser])
   useEffect(() => {
-    if (!meId) return
+    if (!meId || socialReadyUser !== meId) return
     let active = true
     let timer
     let delay = 1500
@@ -838,6 +838,15 @@ export function AppProvider({ children }) {
             const signals = await response.json()
             for (const signal of signals) await callSignalHandlerRef.current?.(signal)
           } else {
+            if (response.status === 403) {
+              const result = await response.json().catch(() => ({}))
+              if (isAuthenticationFailure(response, result)) {
+                clearMeId()
+                setMeId(null)
+                setSocialReadyUser(null)
+                return
+              }
+            }
             delay = Math.min(delay * 2, 15000) // server band/xato — sekinlashamiz
           }
         }
@@ -848,9 +857,10 @@ export function AppProvider({ children }) {
     }
     pollCallSignals()
     return () => { active = false; clearTimeout(timer) }
-  }, [meId])
+  }, [meId, socialReadyUser])
   useEffect(() => {
     if (!meId) { setPresenceByUser({}); return }
+    if (socialReadyUser !== meId) return
     let active = true
     let timer
     const refreshPresence = async () => {
@@ -864,6 +874,13 @@ export function AppProvider({ children }) {
               return [id, { online: item.online, lastSeen: item.lastSeen }]
             }))
             if (active) setPresenceByUser(current => JSON.stringify(current) === JSON.stringify(presence) ? current : presence)
+          } else if (response.status === 403) {
+            const result = await response.json().catch(() => ({}))
+            if (isAuthenticationFailure(response, result)) {
+              clearMeId()
+              setMeId(null)
+              setSocialReadyUser(null)
+            }
           }
         }
       } catch { /* ignore */ }
@@ -871,7 +888,7 @@ export function AppProvider({ children }) {
     }
     refreshPresence()
     return () => { active = false; clearTimeout(timer) }
-  }, [meId])
+  }, [meId, socialReadyUser])
   const feed = db.posts
     .filter(p => p.userId === me?.id || db.follows.some(f => f.a === me?.id && f.b === p.userId))
     .sort((a, b) => b.t - a.t)

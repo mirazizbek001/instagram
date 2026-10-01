@@ -1,14 +1,22 @@
-from datetime import timedelta
+from datetime import time, timedelta
 from django.conf import settings
 from django.test import TestCase
 from django.utils import timezone
 from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
-from .models import ModerationReport, SocialState, UserBlock, UserPresence, UserRestriction
+from .models import ModerationReport, PlatformSettings, SocialState, UserBlock, UserPresence, UserRestriction
 from .safety import suspected_adult_text
 
 
 class RegistrationTests(APITestCase):
+	def setUp(self):
+		super().setUp()
+		platform_settings = PlatformSettings.get_solo()
+		platform_settings.enabled = True
+		platform_settings.open_time = time(0, 0)
+		platform_settings.close_time = time(0, 0)
+		platform_settings.save(update_fields=['enabled', 'open_time', 'close_time'])
+
 	def test_adult_text_detector_flags_adult_terms_without_flagging_age_references(self):
 		self.assertTrue(suspected_adult_text('18+ content'))
 		self.assertTrue(suspected_adult_text('Please send nude photos'))
@@ -32,6 +40,7 @@ class RegistrationTests(APITestCase):
 	def test_register_creates_user_with_hashed_password(self):
 		response = self.client.post('/plat/register/', {
 			'username': 'new_user',
+			'email': 'new@example.com',
 			'name': 'New User',
 			'password': 'secret123',
 		}, format='json')
@@ -44,6 +53,7 @@ class RegistrationTests(APITestCase):
 		User.objects.create_user(username='taken', password='secret123')
 		response = self.client.post('/plat/register/', {
 			'username': 'taken',
+			'email': 'taken@example.com',
 			'name': 'New User',
 			'password': 'different123',
 		}, format='json')
@@ -54,6 +64,7 @@ class RegistrationTests(APITestCase):
 		User.objects.create_user(username='existing', password='secret123')
 		response = self.client.post('/plat/register/', {
 			'username': 'existing',
+			'email': 'existing@example.com',
 			'name': 'Existing User',
 			'password': 'secret123',
 		}, format='json')
@@ -69,6 +80,54 @@ class RegistrationTests(APITestCase):
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data['username'], 'login_user')
+
+	def test_staff_admin_can_login_when_platform_is_disabled(self):
+		admin = User.objects.create_superuser(username='site_admin', email='admin@example.com', password='secret123')
+		platform_settings = PlatformSettings.get_solo()
+		platform_settings.enabled = False
+		platform_settings.save(update_fields=['enabled'])
+
+		response = self.client.post('/plat/login/', {
+			'username': admin.username,
+			'password': 'secret123',
+		}, format='json')
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data['username'], admin.username)
+		response = self.client.put('/plat/social/', {'posts': []}, format='json')
+		self.assertEqual(response.status_code, 200)
+
+	def test_admin_account_cannot_be_registered_when_platform_is_disabled(self):
+		platform_settings = PlatformSettings.get_solo()
+		platform_settings.enabled = False
+		platform_settings.save(update_fields=['enabled'])
+
+		response = self.client.post('/plat/register/', {
+			'username': 'admin',
+			'email': 'admin@example.com',
+			'name': 'Admin',
+			'password': 'secret123',
+		}, format='json')
+
+		self.assertEqual(response.status_code, 403)
+		self.assertFalse(User.objects.filter(username='admin').exists())
+
+	def test_admin_username_is_reserved_even_when_platform_is_open(self):
+		platform_settings = PlatformSettings.get_solo()
+		platform_settings.enabled = True
+		platform_settings.open_time = time(0, 0)
+		platform_settings.close_time = time(0, 0)
+		platform_settings.save(update_fields=['enabled', 'open_time', 'close_time'])
+
+		response = self.client.post('/plat/register/', {
+			'username': 'admin',
+			'email': 'admin@example.com',
+			'name': 'Admin',
+			'password': 'secret123',
+		}, format='json')
+
+		self.assertEqual(response.status_code, 403)
+		self.assertFalse(User.objects.filter(username='admin').exists())
 
 	def test_login_rejects_invalid_credentials(self):
 		User.objects.create_user(username='login_user', password='secret123')

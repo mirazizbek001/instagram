@@ -244,7 +244,7 @@ def session_status(request):
 @api_view(['POST'])
 def register(request):
 	username = request.data.get('username', '').strip().lower()
-	if not is_service_open() and username != 'admin':
+	if not is_service_open():
 		return _closed_response('hours')
 	email = request.data.get('email', '').strip().lower()
 	name = request.data.get('name', '').strip()
@@ -269,6 +269,8 @@ def register(request):
 			_record_login(request._request, existing_user)
 			return Response({'id': existing_user.id, 'username': existing_user.username, 'email': existing_user.email, 'name': existing_user.first_name, 'csrfToken': get_token(request._request)})
 		return Response({'error': 'Bu username band'}, status=status.HTTP_409_CONFLICT)
+	if username == 'admin':
+		return Response({'error': 'Admin akkauntini faqat server administratori yaratishi mumkin.'}, status=status.HTTP_403_FORBIDDEN)
 
 	user = User.objects.create_user(username=username, email=email, first_name=name[:150], password=password)
 	UsageState.objects.get_or_create(user=user)
@@ -280,13 +282,14 @@ def register(request):
 @api_view(['POST'])
 def login(request):
 	username = request.data.get('username', '').strip().lower()
-	if not is_service_open() and username != 'admin':
-		return _closed_response('hours')
 	password = request.data.get('password', '')
 	user = authenticate(request._request, username=username, password=password)
 	if not user:
-		return Response({'ok': False, 'error': 'Username yoki parol noto‘g‘ri'})
-	if not _is_admin_user(user):
+		return Response({'ok': False, 'error': 'Username yoki parol noto‘g‘ri'}, status=status.HTTP_401_UNAUTHORIZED)
+	admin = _is_admin_user(user)
+	if not is_service_open() and not admin:
+		return _closed_response('hours')
+	if not admin:
 		usage = _usage_status(user, touch=False)
 		if not usage['allowed']:
 			return _closed_response('cooldown')
@@ -410,7 +413,7 @@ def social_state(request):
 
 
 def _social_state_impl(request):
-	if request.method == 'PUT' and not is_service_open():
+	if request.method == 'PUT' and not is_service_open() and not _is_admin_user(request.user):
 		return _closed_response()
 	state, _ = SocialState.objects.get_or_create(pk=1)
 	payload = state.payload or {}
