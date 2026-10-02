@@ -18,12 +18,28 @@ const presenceLabel = (presence, now = Date.now()) => {
   return today ? `Oxirgi faollik: bugun ${time}` : `Oxirgi faollik: ${lastSeen.toLocaleDateString('uz-UZ', { day: 'numeric', month: 'short' })} ${time}`
 }
 
-function VoiceMessagePlayer({ src, mine }) {
+function VoiceMessagePlayer({ src, mine, durationHint = 0 }) {
   const audio = useRef(null)
   const [playing, setPlaying] = useState(false)
   const [position, setPosition] = useState(0)
-  const [duration, setDuration] = useState(0)
-  const progress = duration ? position / duration : 0
+  const [duration, setDuration] = useState(durationHint || 0)
+  const progress = duration ? Math.min(1, Math.max(0, position / duration)) : 0
+  const loadDuration = async event => {
+    const declaredDuration = event.currentTarget.duration
+    if (durationHint > 0) {
+      setDuration(durationHint)
+      return
+    }
+    if (Number.isFinite(declaredDuration)) setDuration(declaredDuration)
+    if (!Number.isFinite(declaredDuration) || declaredDuration <= 60 || src.length > 700000 || !window.AudioContext) return
+    const audioContext = new window.AudioContext()
+    try {
+      const encoded = await fetch(src).then(response => response.arrayBuffer())
+      const decoded = await audioContext.decodeAudioData(encoded)
+      if (decoded.duration > 0 && decoded.duration < declaredDuration) setDuration(decoded.duration)
+    } catch { /* Some browsers cannot decode the recorded container for duration inspection. */ }
+    finally { audioContext.close().catch(() => {}) }
+  }
   const togglePlayback = () => {
     if (!audio.current) return
     if (audio.current.paused) audio.current.play().then(() => setPlaying(true)).catch(() => {})
@@ -35,7 +51,7 @@ function VoiceMessagePlayer({ src, mine }) {
     setPosition(next)
   }
   return <div className={`flex w-[min(74vw,300px)] items-center gap-3 rounded-2xl px-3 py-2.5 ${mine ? 'bg-[#263756] text-white' : 'bg-neutral-100 text-neutral-900 dark:bg-[#17223b] dark:text-white'}`}>
-    <audio ref={audio} src={src} preload="metadata" className="hidden" onLoadedMetadata={event => setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0)} onTimeUpdate={event => setPosition(event.currentTarget.currentTime)} onEnded={() => { setPlaying(false); setPosition(0) }} />
+    <audio ref={audio} src={src} preload="metadata" className="hidden" onLoadedMetadata={loadDuration} onTimeUpdate={event => setPosition(event.currentTarget.currentTime)} onEnded={event => { if (!durationHint && event.currentTarget.currentTime > 0 && event.currentTarget.currentTime < duration) setDuration(event.currentTarget.currentTime); setPlaying(false); setPosition(0) }} />
     <button type="button" onClick={togglePlayback} aria-label={playing ? 'Ovozli xabarni pauza qilish' : 'Ovozli xabarni tinglash'} className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${mine ? 'bg-white/15 hover:bg-white/25' : 'bg-sky-500 text-white hover:bg-sky-400'}`}>{playing ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="translate-x-px" />}</button>
     <div className="min-w-0 flex-1">
       <div className="flex h-6 items-center justify-between gap-[2px]" aria-hidden="true">{audioWave.map((height, index) => <span key={index} className={`w-[2px] shrink-0 rounded-full transition-colors ${index / audioWave.length < progress ? (mine ? 'bg-white' : 'bg-sky-500') : (mine ? 'bg-white/35' : 'bg-neutral-400 dark:bg-white/30')}`} style={{ height }} />)}</div>
@@ -47,7 +63,7 @@ function VoiceMessagePlayer({ src, mine }) {
 }
 
 function Messages({ peer, setPeer }) {
-  const { db, me, byId, A, open, accessInfo, presenceByUser } = useC(); const [t, setT] = useState(''); const [q, setQ] = useState(''); const [menuMessage, setMenuMessage] = useState(null); const [messageMenuPosition, setMessageMenuPosition] = useState(null); const [chatMenu, setChatMenu] = useState(null); const [editingMessage, setEditingMessage] = useState(null); const [recording, setRecording] = useState(false); const [recordingSeconds, setRecordingSeconds] = useState(0); const messagePane = useRef(null); const recorderRef = useRef(null); const discardVoiceRef = useRef(false); const now = Date.now()
+  const { db, me, byId, A, open, accessInfo, presenceByUser } = useC(); const [t, setT] = useState(''); const [q, setQ] = useState(''); const [menuMessage, setMenuMessage] = useState(null); const [messageMenuPosition, setMessageMenuPosition] = useState(null); const [chatMenu, setChatMenu] = useState(null); const [editingMessage, setEditingMessage] = useState(null); const [recording, setRecording] = useState(false); const [recordingSeconds, setRecordingSeconds] = useState(0); const [heartMessage, setHeartMessage] = useState(null); const messagePane = useRef(null); const recorderRef = useRef(null); const discardVoiceRef = useRef(false); const recordingStartedAt = useRef(0); const longPressTimer = useRef(null); const longPressTriggered = useRef(false); const skipContextMenu = useRef(false); const lastMessageTap = useRef(null); const now = Date.now()
   const [viewportMetrics, setViewportMetrics] = useState(() => {
     const viewport = window.visualViewport
     const height = viewport?.height || window.innerHeight
@@ -61,10 +77,14 @@ function Messages({ peer, setPeer }) {
       setViewportMetrics({ height, keyboardInset: Math.max(0, window.innerHeight - height - (viewport?.offsetTop || 0)) })
     }
     window.visualViewport?.addEventListener('resize', updateViewportHeight)
+    window.visualViewport?.addEventListener('scroll', updateViewportHeight)
     window.addEventListener('resize', updateViewportHeight)
+    window.addEventListener('focusin', updateViewportHeight)
     return () => {
       window.visualViewport?.removeEventListener('resize', updateViewportHeight)
+      window.visualViewport?.removeEventListener('scroll', updateViewportHeight)
       window.removeEventListener('resize', updateViewportHeight)
+      window.removeEventListener('focusin', updateViewportHeight)
     }
   }, [])
   useEffect(() => {
@@ -116,10 +136,9 @@ function Messages({ peer, setPeer }) {
     }
   }, [])
   const found = q ? db.users.filter(u => u.id !== me.id && (u.username + u.name).toLowerCase().includes(q.toLowerCase())) : []
-  const toggleMenu = (id, event, message) => {
+  const showMessageMenu = (id, message, trigger) => {
     if (menuMessage === id) { setMenuMessage(null); setMessageMenuPosition(null); return }
     setMenuMessage(id)
-    const trigger = event.currentTarget.getBoundingClientRect()
     const pane = messagePane.current?.getBoundingClientRect()
     const menuWidth = 192
     const menuHeight = message.from === me.id && message.text && !message.src ? 128 : message.from === me.id ? 88 : 48
@@ -130,6 +149,40 @@ function Messages({ peer, setPeer }) {
     if (top < (pane?.top || 0) + 8) top = trigger.bottom + 8
     if (pane && top + menuHeight > pane.bottom - 8) top = Math.max(pane.top + 8, pane.bottom - menuHeight - 8)
     setMessageMenuPosition({ top, left })
+  }
+  const toggleMenu = (id, event, message) => showMessageMenu(id, message, event.currentTarget.getBoundingClientRect())
+  const onMessageTouchStart = (event, message) => {
+    if (event.touches.length !== 1) return
+    longPressTriggered.current = false
+    const target = event.currentTarget
+    const rect = target.getBoundingClientRect()
+    clearTimeout(longPressTimer.current)
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true
+      skipContextMenu.current = true
+      showMessageMenu(message.id, message, rect)
+      setTimeout(() => { skipContextMenu.current = false; longPressTriggered.current = false }, 1000)
+    }, 500)
+  }
+  const cancelMessageLongPress = () => clearTimeout(longPressTimer.current)
+  const onMessageTap = (event, message) => {
+    if (longPressTriggered.current) {
+      longPressTriggered.current = false
+      event.preventDefault()
+      return
+    }
+    const now = Date.now()
+    if (lastMessageTap.current?.id === message.id && now - lastMessageTap.current.at < 350) {
+      lastMessageTap.current = null
+      if (!message.callEvent && message.mediaType !== 'audio') {
+        if (A.reactMessage(message.id)) {
+          setHeartMessage(message.id)
+          setTimeout(() => setHeartMessage(current => current === message.id ? null : current), 650)
+        }
+      }
+      return
+    }
+    lastMessageTap.current = { id: message.id, at: now }
   }
   const toggleChatMenu = (type, id) => setChatMenu(current => current?.type === type && current.id === id ? null : { type, id })
   const deleteChat = async id => {
@@ -170,11 +223,14 @@ function Messages({ peer, setPeer }) {
         const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' })
         if (!blob.size) { A.toast('Ovoz yozuvi bo‘sh.'); return }
         if (blob.size > 25 * 1024 * 1024) { A.toast('Ovozli xabar hajmi 25 MB dan oshmasin.'); return }
-        A.send(peer, { src: await readMedia(blob), mediaType: 'audio' })
+        const mediaDuration = Math.max(1, Math.round((Date.now() - recordingStartedAt.current) / 1000))
+        recordingStartedAt.current = 0
+        A.send(peer, { src: await readMedia(blob), mediaType: 'audio', mediaDuration })
       }
       recorder.onerror = () => { stream.getTracks().forEach(track => track.stop()); recorderRef.current = null; setRecording(false); A.toast('Ovoz yozishda xatolik.') }
       recorderRef.current = recorder
       recorder.start()
+      recordingStartedAt.current = Date.now()
       setRecordingSeconds(0)
       setRecording(true)
     } catch (error) {
@@ -233,11 +289,13 @@ function Messages({ peer, setPeer }) {
           const showTime = !sameGroup && (!next || next.from !== m.from || Math.abs(next.t - m.t) >= 60000)
           return <div key={m.id} className={`flex flex-col ${my ? 'items-end' : 'items-start'}`}>
             <div className={`group/message relative flex max-w-full items-center gap-1 ${my ? 'flex-row-reverse' : ''}`}>
-              <div onContextMenu={event => { event.preventDefault(); setMenuMessage(m.id) }} className="relative max-w-[min(78vw,520px)] touch-pan-y">
+              <div onTouchStart={event => onMessageTouchStart(event, m)} onTouchEnd={cancelMessageLongPress} onTouchCancel={cancelMessageLongPress} onTouchMove={cancelMessageLongPress} onClick={event => onMessageTap(event, m)} onContextMenu={event => { event.preventDefault(); if (!skipContextMenu.current) toggleMenu(m.id, event, m) }} className="relative max-w-[min(78vw,520px)] touch-pan-y select-none">
                 {m.storyId && (() => { const story = db.stories.find(item => item.id === m.storyId); return <button onClick={() => story ? open.story(story.id) : A.toast('Bu Story endi mavjud emas')} className="mb-1 flex h-14 w-44 max-w-full items-center gap-2 overflow-hidden rounded-lg border-l-2 border-pink-500 bg-neutral-100 text-left hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700"><span className="grid h-full w-10 shrink-0 place-items-center overflow-hidden bg-black">{story?.type === 'video' ? <video src={story.media} muted playsInline preload="metadata" className="h-full w-full object-cover" /> : story?.media ? <img src={story.media} alt="" className="h-full w-full object-cover" /> : <Play size={18} className="text-white" />}</span><span className="min-w-0 px-1"><b className="block text-[10px] text-neutral-500 dark:text-neutral-300">Story’ga javob</b><span className="block truncate text-xs">{story?.caption || 'Story’ni ko‘rish'}</span></span></button> })()}
-                {m.src ? m.mediaType === 'video' ? <video src={m.src} controls playsInline className="max-h-[360px] max-w-[min(70vw,420px)] rounded-2xl bg-black object-contain" /> : m.mediaType === 'audio' ? <VoiceMessagePlayer src={m.src} mine={my} /> : <img src={m.src} alt="" className="max-h-[360px] max-w-[min(70vw,420px)] rounded-2xl object-cover" />
+                {m.callEvent ? <div className={`flex min-w-44 items-center gap-3 rounded-2xl px-4 py-3 ${my ? 'bg-[#263756] text-white' : 'bg-neutral-100 dark:bg-neutral-800'}`}><span className={`grid h-9 w-9 place-items-center rounded-full ${m.callEvent.status === 'ended' ? 'bg-emerald-500/15 text-emerald-500' : 'bg-amber-500/15 text-amber-500'}`}><Phone size={18} /></span><span><b className="block text-sm">{m.callEvent.mode === 'video' ? 'Video qo‘ng‘iroq' : 'Audio qo‘ng‘iroq'}</b><span className="block text-xs opacity-70">{m.callEvent.status === 'ended' ? `Tugadi · ${String(Math.floor(m.callEvent.duration / 60)).padStart(2, '0')}:${String(m.callEvent.duration % 60).padStart(2, '0')}` : m.callEvent.status === 'declined' ? 'Rad etildi' : m.callEvent.status === 'failed' ? 'Ulanmadi' : 'Javobsiz'}</span></span></div> : m.src ? m.mediaType === 'video' ? <video src={m.src} controls playsInline className="max-h-[360px] max-w-[min(70vw,420px)] rounded-2xl bg-black object-contain" /> : m.mediaType === 'audio' ? <VoiceMessagePlayer src={m.src} mine={my} durationHint={m.mediaDuration} /> : <img src={m.src} alt="" className="max-h-[360px] max-w-[min(70vw,420px)] rounded-2xl object-cover" />
                   : big(m) ? <span className="text-5xl leading-tight">{m.text}</span>
                     : <div className={`w-fit max-w-full whitespace-pre-wrap break-words rounded-3xl px-4 py-2 text-[15px] ${my ? 'bg-gradient-to-br from-[#7c3aed] to-[#3b82f6] text-white' : 'bg-neutral-100 dark:bg-neutral-800'}`}>{m.text}{m.edited && <span className="ml-2 text-[10px] opacity-70">tahrirlangan</span>}</div>}
+                {Object.keys(m.reactions || {}).length > 0 && <span className="absolute -bottom-3 right-2 z-20 rounded-full border border-neutral-700 bg-neutral-900 px-2 py-0.5 text-xs text-white shadow">❤️ {Object.keys(m.reactions).length}</span>}
+                {heartMessage === m.id && <Heart size={64} fill="white" className="pointer-events-none absolute inset-0 z-10 m-auto text-white drop-shadow-2xl" />}
                 {menuMessage === m.id && messageMenuPosition && <div data-message-menu-root style={{ position: 'fixed', top: messageMenuPosition.top, left: messageMenuPosition.left }} className="z-[80] min-w-48 overflow-hidden rounded-xl border border-neutral-700 bg-neutral-900 py-1 text-left text-sm text-white shadow-xl">{my && m.text && !m.src && <button onClick={() => { setEditingMessage(m.id); setT(m.text); setMenuMessage(null); setMessageMenuPosition(null) }} className="block w-full px-4 py-2.5 text-left hover:bg-white/10">Tahrirlash</button>}{my && <button onClick={() => { A.deleteMessage(m.id, true); setMenuMessage(null); setMessageMenuPosition(null) }} className="block w-full px-4 py-2.5 text-left text-red-400 hover:bg-white/10">Hammadan o‘chirish</button>}<button onClick={() => { A.deleteMessage(m.id); setMenuMessage(null); setMessageMenuPosition(null) }} className="block w-full px-4 py-2.5 text-left hover:bg-white/10">O‘zimdan o‘chirish</button></div>}
               </div>
               <button data-message-menu-root aria-label="Xabar amallari" title="Xabar amallari" onClick={event => toggleMenu(m.id, event, m)} className={`shrink-0 rounded-full p-1 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 sm:opacity-0 sm:group-hover/message:opacity-100 ${menuMessage === m.id ? 'opacity-100' : ''}`}><MoreHorizontal size={17} /></button>

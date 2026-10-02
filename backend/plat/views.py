@@ -440,6 +440,15 @@ def social_updates(request):
 	]
 	response = Response({
 		'messages': messages,
+		'messageReactions': [
+			{'id': str(item.get('id')), 'reactions': item.get('reactions', {})}
+			for item in payload.get('messages', [])
+			if (item.get('from') == username or item.get('to') == username)
+			and str(item.get('id')) not in deleted_ids
+			and str(item.get('id')) not in hidden_ids
+			and item.get('t', 0) > cutoffs.get(item.get('to') if item.get('from') == username else item.get('from'), 0)
+			and 'reactions' in item
+		],
 		'readMessageIds': [
 			str(item.get('id')) for item in payload.get('messages', [])
 			if item.get('read') and (item.get('from') == username or item.get('to') == username)
@@ -462,12 +471,12 @@ def social_fast_action(request):
 	data = request.data if isinstance(request.data, dict) else {}
 	action = data.get('action')
 	username = request.user.username
-	if action not in ('follow', 'unfollow', 'message', 'read'):
+	if action not in ('follow', 'unfollow', 'message', 'read', 'call-log', 'react', 'voice-duration'):
 		return Response({'error': 'Amal qo‘llab-quvvatlanmaydi.'}, status=status.HTTP_400_BAD_REQUEST)
-	if action != 'read' and not is_service_open() and not _is_admin_user(request.user):
+	if action not in ('read', 'call-log', 'voice-duration') and not is_service_open() and not _is_admin_user(request.user):
 		return _closed_response()
 	restriction = _active_restriction(request.user)
-	if restriction and action in ('follow', 'unfollow', 'message'):
+	if restriction and action in ('follow', 'unfollow', 'message', 'react'):
 		return Response({'error': 'Admin cheklovi faol.'}, status=status.HTTP_403_FORBIDDEN)
 	with transaction.atomic():
 		SocialState.objects.get_or_create(pk=1)
@@ -490,6 +499,39 @@ def social_fast_action(request):
 				})
 			elif action == 'unfollow':
 				payload['follows'] = [item for item in follows if not (item.get('a') == username and item.get('b') == target.username)]
+		elif action == 'react':
+			message_id = str(data.get('messageId', ''))
+			emoji = data.get('emoji')
+			if emoji != '❤️':
+				return Response({'error': 'Faqat yurak reaksiyasi ruxsat etiladi.'}, status=status.HTTP_400_BAD_REQUEST)
+			message = next((item for item in messages if str(item.get('id')) == message_id), None)
+			if not message or username not in (message.get('from'), message.get('to')) or message.get('callEvent') or message.get('mediaType') == 'audio':
+				return Response({'error': 'Bu xabarga reaksiya qoldirib bo‘lmaydi.'}, status=status.HTTP_404_NOT_FOUND)
+			reactions = message.setdefault('reactions', {})
+			if reactions.get(username) == emoji:
+				reactions.pop(username, None)
+			else:
+				reactions[username] = emoji
+			state.payload = payload
+			state.save(update_fields=['payload', 'updated_at'])
+			response = Response({'saved': True, 'reactions': reactions})
+			response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+			return response
+		elif action == 'voice-duration':
+			message_id = str(data.get('messageId', ''))
+			try:
+				duration = max(1, min(86400, int(data.get('duration', 0))))
+			except (TypeError, ValueError):
+				return Response({'error': 'Ovoz davomiyligi noto‘g‘ri.'}, status=status.HTTP_400_BAD_REQUEST)
+			message = next((item for item in messages if str(item.get('id')) == message_id), None)
+			if not message or username not in (message.get('from'), message.get('to')) or message.get('mediaType') != 'audio':
+				return Response({'error': 'Ovozli xabar topilmadi.'}, status=status.HTTP_404_NOT_FOUND)
+			message['mediaDuration'] = duration
+			state.payload = payload
+			state.save(update_fields=['payload', 'updated_at'])
+			response = Response({'saved': True, 'duration': duration})
+			response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+			return response
 		elif action == 'read':
 			sender = str(data.get('from', ''))
 			for message in messages:
@@ -500,6 +542,14 @@ def social_fast_action(request):
 			if not isinstance(message, dict):
 				return Response({'error': 'Xabar ma’lumoti noto‘g‘ri.'}, status=status.HTTP_400_BAD_REQUEST)
 			message = dict(message)
+			if action == 'call-log':
+				call_event = message.get('callEvent')
+				if not isinstance(call_event, dict) or call_event.get('mode') not in ('audio', 'video') or call_event.get('status') not in ('ended', 'declined', 'missed', 'failed'):
+					return Response({'error': 'Qo‘ng‘iroq yozuvi noto‘g‘ri.'}, status=status.HTTP_400_BAD_REQUEST)
+				try:
+					call_event['duration'] = max(0, min(86400, int(call_event.get('duration', 0))))
+				except (TypeError, ValueError):
+					return Response({'error': 'Qo‘ng‘iroq davomiyligi noto‘g‘ri.'}, status=status.HTTP_400_BAD_REQUEST)
 			target = User.objects.filter(username=message.get('to')).first()
 			if not target or target == request.user:
 				return Response({'error': 'Qabul qiluvchi topilmadi.'}, status=status.HTTP_404_NOT_FOUND)

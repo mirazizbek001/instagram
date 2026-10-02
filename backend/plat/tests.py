@@ -480,6 +480,53 @@ class RegistrationTests(APITestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertTrue(SocialState.objects.get(pk=1).payload['messages'][0]['read'])
 
+	def test_message_reaction_syncs_without_returning_message_media(self):
+		reactor = User.objects.create_user(username='reactor', password='password123')
+		sender = User.objects.create_user(username='reaction_sender', password='password123')
+		image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jg5kAAAAASUVORK5CYII='
+		SocialState.objects.create(payload={'messages': [{
+			'id': 'react-message', 'from': sender.username, 'to': reactor.username,
+			'src': image, 'mediaType': 'image', 't': 100, 'read': True,
+		}]})
+		self.client.force_login(reactor)
+		response = self.client.post('/plat/social/fast/', {
+			'action': 'react', 'messageId': 'react-message', 'emoji': '❤️',
+		}, format='json')
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data['reactions'], {reactor.username: '❤️'})
+
+		updates = self.client.get('/plat/social/updates/?since=1000')
+		self.assertEqual(updates.data['messages'], [])
+		self.assertEqual(updates.data['messageReactions'], [
+			{'id': 'react-message', 'reactions': {reactor.username: '❤️'}},
+		])
+		response = self.client.post('/plat/social/fast/', {
+			'action': 'react', 'messageId': 'react-message', 'emoji': '❤️',
+		}, format='json')
+		self.assertEqual(response.data['reactions'], {})
+		self.assertEqual(self.client.get('/plat/social/updates/?since=1000').data['messageReactions'], [
+			{'id': 'react-message', 'reactions': {}},
+		])
+
+	def test_call_log_is_delivered_into_chat_history(self):
+		caller = User.objects.create_user(username='call_caller', password='password123')
+		receiver = User.objects.create_user(username='call_receiver', password='password123')
+		self.client.force_login(caller)
+		response = self.client.post('/plat/social/fast/', {
+			'action': 'call-log',
+			'message': {
+				'id': 'call-log-1', 'to': receiver.username, 'text': '', 't': 123,
+				'callEvent': {'mode': 'video', 'status': 'ended', 'duration': 42},
+			},
+		}, format='json')
+
+		self.assertEqual(response.status_code, 200)
+		self.client.force_login(receiver)
+		message = self.client.get('/plat/social/').data['messages'][0]
+		self.assertEqual(message['callEvent']['mode'], 'video')
+		self.assertEqual(message['callEvent']['status'], 'ended')
+		self.assertEqual(message['callEvent']['duration'], 42)
+
 	def test_voice_message_is_delivered_to_recipient_without_admin_review(self):
 		sender = User.objects.create_user(username='voice_sender', password='password123')
 		receiver = User.objects.create_user(username='voice_receiver', password='password123')

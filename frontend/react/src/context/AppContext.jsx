@@ -472,7 +472,13 @@ export function AppProvider({ children }) {
           stories: remote.stories.map(story => ({ ...story, userId: localId(story.userId) })),
           seenStories: remote.seenStories.map(item => ({ ...item, viewerId: localId(item.viewerId) })),
           follows: remote.follows.map(follow => ({ ...follow, a: localId(follow.a), b: localId(follow.b) })),
-          messages: remote.messages.map(message => ({ ...message, from: localId(message.from), to: localId(message.to), hiddenFor: (message.hiddenFor || []).map(localId) })),
+          messages: remote.messages.map(message => ({
+            ...message,
+            from: localId(message.from),
+            to: localId(message.to),
+            hiddenFor: (message.hiddenFor || []).map(localId),
+            reactions: Object.fromEntries(Object.entries(message.reactions || {}).map(([username, emoji]) => [localId(username), emoji])),
+          })),
           deletedMessages: remote.deletedMessages.map(message => ({ ...message, from: localId(message.from), to: localId(message.to) })),
           hiddenChats: remote.hiddenChats.map(chat => ({ ...chat, owner: localId(chat.owner), peer: localId(chat.peer) })),
           blockedUsers: remote.blockedUsers.map(localId),
@@ -762,6 +768,35 @@ export function AppProvider({ children }) {
       })
       return true
     },
+    reactMessage: id => {
+      const message = dbRef.current.messages.find(item => String(item.id) === String(id))
+      if (!message || message.callEvent || message.mediaType === 'audio' || (message.from !== meId && message.to !== meId)) return false
+      const previous = { ...(message.reactions || {}) }
+      const next = { ...previous }
+      if (next[meId] === '❤️') delete next[meId]
+      else next[meId] = '❤️'
+      if (!save(d => {
+        const current = d.messages.find(item => String(item.id) === String(id))
+        if (current) current.reactions = next
+      }, { skipRemoteSync: true })) return false
+      sendFastAction({ action: 'react', messageId: message.id, emoji: '❤️' }).then(result => {
+        const reactions = Object.fromEntries(Object.entries(result.reactions || {}).map(([username, emoji]) => [
+          dbRef.current.users.find(user => user.username === username)?.id || username,
+          emoji,
+        ]))
+        save(d => {
+          const current = d.messages.find(item => String(item.id) === String(id))
+          if (current) current.reactions = reactions
+        }, { skipRemoteSync: true })
+      }).catch(error => {
+        save(d => {
+          const current = d.messages.find(item => String(item.id) === String(id))
+          if (current) current.reactions = previous
+        }, { skipRemoteSync: true })
+        say(error.message)
+      })
+      return true
+    },
     editMessage: (id, text) => {
       if (blockRestrictedAction()) return false
       if (kidsUnsafeText(text)) { say('Haqoratli yoki 7+ ga mos bo‘lmagan xabar yuborilmadi.'); return false }
@@ -792,10 +827,15 @@ export function AppProvider({ children }) {
         const current = dbRef.current.messages
         const currentById = new Map(current.map(message => [String(message.id), message]))
         const readIds = new Set((remote.readMessageIds || []).map(String))
+        const reactionUpdates = new Map((remote.messageReactions || []).map(item => [
+          String(item.id),
+          Object.fromEntries(Object.entries(item.reactions || {}).map(([username, emoji]) => [localId(username), emoji])),
+        ]))
         const incoming = remote.messages.map(message => {
           const restored = { ...message, from: localId(message.from), to: localId(message.to), hiddenFor: (message.hiddenFor || []).map(localId) }
           const local = currentById.get(String(restored.id))
           if (readIds.has(String(restored.id)) || local?.read) restored.read = true
+          if (reactionUpdates.has(String(restored.id))) restored.reactions = reactionUpdates.get(String(restored.id))
           return restored
         })
         messageCursorRef.current = Math.max(messageCursorRef.current, ...incoming.map(message => Number(message.t) || 0))
@@ -813,8 +853,9 @@ export function AppProvider({ children }) {
         const notifs = [...dbRef.current.notifs.filter(notif => notif.to !== meId), ...incomingNotifs]
         const messagesChanged = incoming.some(message => {
           const old = currentById.get(String(message.id))
-          return !old || old.read !== message.read || old.text !== message.text || old.src !== message.src || old.edited !== message.edited || JSON.stringify(old.hiddenFor || []) !== JSON.stringify(message.hiddenFor || [])
+          return !old || old.read !== message.read || old.text !== message.text || old.src !== message.src || old.edited !== message.edited || JSON.stringify(old.hiddenFor || []) !== JSON.stringify(message.hiddenFor || []) || JSON.stringify(old.reactions || {}) !== JSON.stringify(message.reactions || {})
         }) || current.some(message => readIds.has(String(message.id)) && !message.read)
+          || [...reactionUpdates].some(([id, reactions]) => JSON.stringify(currentById.get(id)?.reactions || {}) !== JSON.stringify(reactions))
         const changed = messagesChanged
           || JSON.stringify(dbRef.current.follows) !== JSON.stringify(follows)
           || JSON.stringify(dbRef.current.notifs) !== JSON.stringify(notifs)
@@ -826,7 +867,10 @@ export function AppProvider({ children }) {
         save(d => {
           const messages = new Map(d.messages.map(message => [message.id, message]))
           incoming.forEach(message => messages.set(message.id, message))
-          messages.forEach(message => { if (readIds.has(String(message.id))) message.read = true })
+          messages.forEach(message => {
+            if (readIds.has(String(message.id))) message.read = true
+            if (reactionUpdates.has(String(message.id))) message.reactions = reactionUpdates.get(String(message.id))
+          })
           d.messages = [...messages.values()]
           d.deletedMessages = deleted
           d.hiddenChats = hiddenChats
