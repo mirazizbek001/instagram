@@ -18,25 +18,35 @@ const presenceLabel = (presence, now = Date.now()) => {
   return today ? `Oxirgi faollik: bugun ${time}` : `Oxirgi faollik: ${lastSeen.toLocaleDateString('uz-UZ', { day: 'numeric', month: 'short' })} ${time}`
 }
 
-function VoiceMessagePlayer({ src, mine, durationHint = 0 }) {
+function VoiceMessagePlayer({ src, mine, durationHint = 0, onDurationCorrected }) {
   const audio = useRef(null)
+  const reportedDuration = useRef(durationHint || 0)
   const [playing, setPlaying] = useState(false)
   const [position, setPosition] = useState(0)
   const [duration, setDuration] = useState(durationHint || 0)
   const progress = duration ? Math.min(1, Math.max(0, position / duration)) : 0
+  const correctDuration = value => {
+    if (!Number.isFinite(value) || value <= 0) return
+    const corrected = Math.max(1, Math.round(value))
+    setDuration(corrected)
+    if (!durationHint && reportedDuration.current !== corrected) {
+      reportedDuration.current = corrected
+      onDurationCorrected?.(corrected)
+    }
+  }
   const loadDuration = async event => {
     const declaredDuration = event.currentTarget.duration
     if (durationHint > 0) {
       setDuration(durationHint)
       return
     }
-    if (Number.isFinite(declaredDuration)) setDuration(declaredDuration)
+    if (Number.isFinite(declaredDuration)) setDuration(declaredDuration > 60 ? 0 : declaredDuration)
     if (!Number.isFinite(declaredDuration) || declaredDuration <= 60 || src.length > 700000 || !window.AudioContext) return
     const audioContext = new window.AudioContext()
     try {
       const encoded = await fetch(src).then(response => response.arrayBuffer())
       const decoded = await audioContext.decodeAudioData(encoded)
-      if (decoded.duration > 0 && decoded.duration < declaredDuration) setDuration(decoded.duration)
+      if (decoded.duration > 0 && decoded.duration < declaredDuration) correctDuration(decoded.duration)
     } catch { /* Some browsers cannot decode the recorded container for duration inspection. */ }
     finally { audioContext.close().catch(() => {}) }
   }
@@ -51,7 +61,7 @@ function VoiceMessagePlayer({ src, mine, durationHint = 0 }) {
     setPosition(next)
   }
   return <div className={`flex w-[min(74vw,300px)] items-center gap-3 rounded-2xl px-3 py-2.5 ${mine ? 'bg-[#263756] text-white' : 'bg-neutral-100 text-neutral-900 dark:bg-[#17223b] dark:text-white'}`}>
-    <audio ref={audio} src={src} preload="metadata" className="hidden" onLoadedMetadata={loadDuration} onTimeUpdate={event => setPosition(event.currentTarget.currentTime)} onEnded={event => { if (!durationHint && event.currentTarget.currentTime > 0 && event.currentTarget.currentTime < duration) setDuration(event.currentTarget.currentTime); setPlaying(false); setPosition(0) }} />
+    <audio ref={audio} src={src} preload="metadata" className="hidden" onLoadedMetadata={loadDuration} onTimeUpdate={event => setPosition(event.currentTarget.currentTime)} onEnded={event => { if (!durationHint && event.currentTarget.currentTime > 0 && event.currentTarget.currentTime < duration) correctDuration(event.currentTarget.currentTime); setPlaying(false); setPosition(0) }} />
     <button type="button" onClick={togglePlayback} aria-label={playing ? 'Ovozli xabarni pauza qilish' : 'Ovozli xabarni tinglash'} className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${mine ? 'bg-white/15 hover:bg-white/25' : 'bg-sky-500 text-white hover:bg-sky-400'}`}>{playing ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="translate-x-px" />}</button>
     <div className="min-w-0 flex-1">
       <div className="flex h-6 items-center justify-between gap-[2px]" aria-hidden="true">{audioWave.map((height, index) => <span key={index} className={`w-[2px] shrink-0 rounded-full transition-colors ${index / audioWave.length < progress ? (mine ? 'bg-white' : 'bg-sky-500') : (mine ? 'bg-white/35' : 'bg-neutral-400 dark:bg-white/30')}`} style={{ height }} />)}</div>
@@ -291,7 +301,7 @@ function Messages({ peer, setPeer }) {
             <div className={`group/message relative flex max-w-full items-center gap-1 ${my ? 'flex-row-reverse' : ''}`}>
               <div onTouchStart={event => onMessageTouchStart(event, m)} onTouchEnd={cancelMessageLongPress} onTouchCancel={cancelMessageLongPress} onTouchMove={cancelMessageLongPress} onClick={event => onMessageTap(event, m)} onContextMenu={event => { event.preventDefault(); if (!skipContextMenu.current) toggleMenu(m.id, event, m) }} className="relative max-w-[min(78vw,520px)] touch-pan-y select-none">
                 {m.storyId && (() => { const story = db.stories.find(item => item.id === m.storyId); return <button onClick={() => story ? open.story(story.id) : A.toast('Bu Story endi mavjud emas')} className="mb-1 flex h-14 w-44 max-w-full items-center gap-2 overflow-hidden rounded-lg border-l-2 border-pink-500 bg-neutral-100 text-left hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700"><span className="grid h-full w-10 shrink-0 place-items-center overflow-hidden bg-black">{story?.type === 'video' ? <video src={story.media} muted playsInline preload="metadata" className="h-full w-full object-cover" /> : story?.media ? <img src={story.media} alt="" className="h-full w-full object-cover" /> : <Play size={18} className="text-white" />}</span><span className="min-w-0 px-1"><b className="block text-[10px] text-neutral-500 dark:text-neutral-300">Story’ga javob</b><span className="block truncate text-xs">{story?.caption || 'Story’ni ko‘rish'}</span></span></button> })()}
-                {m.callEvent ? <div className={`flex min-w-44 items-center gap-3 rounded-2xl px-4 py-3 ${my ? 'bg-[#263756] text-white' : 'bg-neutral-100 dark:bg-neutral-800'}`}><span className={`grid h-9 w-9 place-items-center rounded-full ${m.callEvent.status === 'ended' ? 'bg-emerald-500/15 text-emerald-500' : 'bg-amber-500/15 text-amber-500'}`}><Phone size={18} /></span><span><b className="block text-sm">{m.callEvent.mode === 'video' ? 'Video qo‘ng‘iroq' : 'Audio qo‘ng‘iroq'}</b><span className="block text-xs opacity-70">{m.callEvent.status === 'ended' ? `Tugadi · ${String(Math.floor(m.callEvent.duration / 60)).padStart(2, '0')}:${String(m.callEvent.duration % 60).padStart(2, '0')}` : m.callEvent.status === 'declined' ? 'Rad etildi' : m.callEvent.status === 'failed' ? 'Ulanmadi' : 'Javobsiz'}</span></span></div> : m.src ? m.mediaType === 'video' ? <video src={m.src} controls playsInline className="max-h-[360px] max-w-[min(70vw,420px)] rounded-2xl bg-black object-contain" /> : m.mediaType === 'audio' ? <VoiceMessagePlayer src={m.src} mine={my} durationHint={m.mediaDuration} /> : <img src={m.src} alt="" className="max-h-[360px] max-w-[min(70vw,420px)] rounded-2xl object-cover" />
+                {m.callEvent ? <div className={`flex min-w-44 items-center gap-3 rounded-2xl px-4 py-3 ${my ? 'bg-[#263756] text-white' : 'bg-neutral-100 dark:bg-neutral-800'}`}><span className={`grid h-9 w-9 place-items-center rounded-full ${m.callEvent.status === 'ended' ? 'bg-emerald-500/15 text-emerald-500' : 'bg-amber-500/15 text-amber-500'}`}><Phone size={18} /></span><span><b className="block text-sm">{m.callEvent.mode === 'video' ? 'Video qo‘ng‘iroq' : 'Audio qo‘ng‘iroq'}</b><span className="block text-xs opacity-70">{m.callEvent.status === 'ended' ? `Tugadi · ${String(Math.floor(m.callEvent.duration / 60)).padStart(2, '0')}:${String(m.callEvent.duration % 60).padStart(2, '0')}` : m.callEvent.status === 'declined' ? 'Rad etildi' : m.callEvent.status === 'failed' ? 'Ulanmadi' : 'Javobsiz'}</span></span></div> : m.src ? m.mediaType === 'video' ? <video src={m.src} controls playsInline className="max-h-[360px] max-w-[min(70vw,420px)] rounded-2xl bg-black object-contain" /> : m.mediaType === 'audio' ? <VoiceMessagePlayer src={m.src} mine={my} durationHint={m.mediaDuration} onDurationCorrected={duration => A.updateVoiceDuration(m.id, duration)} /> : <img src={m.src} alt="" className="max-h-[360px] max-w-[min(70vw,420px)] rounded-2xl object-cover" />
                   : big(m) ? <span className="text-5xl leading-tight">{m.text}</span>
                     : <div className={`w-fit max-w-full whitespace-pre-wrap break-words rounded-3xl px-4 py-2 text-[15px] ${my ? 'bg-gradient-to-br from-[#7c3aed] to-[#3b82f6] text-white' : 'bg-neutral-100 dark:bg-neutral-800'}`}>{m.text}{m.edited && <span className="ml-2 text-[10px] opacity-70">tahrirlangan</span>}</div>}
                 {Object.keys(m.reactions || {}).length > 0 && <span className="absolute -bottom-3 right-2 z-20 rounded-full border border-neutral-700 bg-neutral-900 px-2 py-0.5 text-xs text-white shadow">❤️ {Object.keys(m.reactions).length}</span>}

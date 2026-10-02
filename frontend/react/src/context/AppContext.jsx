@@ -797,6 +797,18 @@ export function AppProvider({ children }) {
       })
       return true
     },
+    updateVoiceDuration: (id, duration) => {
+      const message = dbRef.current.messages.find(item => String(item.id) === String(id))
+      if (!message || message.mediaType !== 'audio' || !Number.isFinite(duration)) return false
+      const corrected = Math.max(1, Math.min(86400, Math.round(duration)))
+      if (message.mediaDuration === corrected) return true
+      if (!save(d => {
+        const current = d.messages.find(item => String(item.id) === String(id))
+        if (current) current.mediaDuration = corrected
+      }, { skipRemoteSync: true })) return false
+      sendFastAction({ action: 'voice-duration', messageId: message.id, duration: corrected }).catch(() => {})
+      return true
+    },
     editMessage: (id, text) => {
       if (blockRestrictedAction()) return false
       if (kidsUnsafeText(text)) { say('Haqoratli yoki 7+ ga mos bo‘lmagan xabar yuborilmadi.'); return false }
@@ -831,11 +843,13 @@ export function AppProvider({ children }) {
           String(item.id),
           Object.fromEntries(Object.entries(item.reactions || {}).map(([username, emoji]) => [localId(username), emoji])),
         ]))
+        const durationUpdates = new Map((remote.voiceDurations || []).map(item => [String(item.id), item.duration]))
         const incoming = remote.messages.map(message => {
           const restored = { ...message, from: localId(message.from), to: localId(message.to), hiddenFor: (message.hiddenFor || []).map(localId) }
           const local = currentById.get(String(restored.id))
           if (readIds.has(String(restored.id)) || local?.read) restored.read = true
           if (reactionUpdates.has(String(restored.id))) restored.reactions = reactionUpdates.get(String(restored.id))
+          if (durationUpdates.has(String(restored.id))) restored.mediaDuration = durationUpdates.get(String(restored.id))
           return restored
         })
         messageCursorRef.current = Math.max(messageCursorRef.current, ...incoming.map(message => Number(message.t) || 0))
@@ -853,9 +867,10 @@ export function AppProvider({ children }) {
         const notifs = [...dbRef.current.notifs.filter(notif => notif.to !== meId), ...incomingNotifs]
         const messagesChanged = incoming.some(message => {
           const old = currentById.get(String(message.id))
-          return !old || old.read !== message.read || old.text !== message.text || old.src !== message.src || old.edited !== message.edited || JSON.stringify(old.hiddenFor || []) !== JSON.stringify(message.hiddenFor || []) || JSON.stringify(old.reactions || {}) !== JSON.stringify(message.reactions || {})
+          return !old || old.read !== message.read || old.text !== message.text || old.src !== message.src || old.edited !== message.edited || old.mediaDuration !== message.mediaDuration || JSON.stringify(old.hiddenFor || []) !== JSON.stringify(message.hiddenFor || []) || JSON.stringify(old.reactions || {}) !== JSON.stringify(message.reactions || {})
         }) || current.some(message => readIds.has(String(message.id)) && !message.read)
           || [...reactionUpdates].some(([id, reactions]) => JSON.stringify(currentById.get(id)?.reactions || {}) !== JSON.stringify(reactions))
+          || [...durationUpdates].some(([id, duration]) => currentById.get(id)?.mediaDuration !== duration)
         const changed = messagesChanged
           || JSON.stringify(dbRef.current.follows) !== JSON.stringify(follows)
           || JSON.stringify(dbRef.current.notifs) !== JSON.stringify(notifs)
@@ -870,6 +885,7 @@ export function AppProvider({ children }) {
           messages.forEach(message => {
             if (readIds.has(String(message.id))) message.read = true
             if (reactionUpdates.has(String(message.id))) message.reactions = reactionUpdates.get(String(message.id))
+            if (durationUpdates.has(String(message.id))) message.mediaDuration = durationUpdates.get(String(message.id))
           })
           d.messages = [...messages.values()]
           d.deletedMessages = deleted

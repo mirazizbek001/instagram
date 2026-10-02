@@ -449,6 +449,12 @@ def social_updates(request):
 			and item.get('t', 0) > cutoffs.get(item.get('to') if item.get('from') == username else item.get('from'), 0)
 			and 'reactions' in item
 		],
+		'voiceDurations': [
+			{'id': str(item.get('id')), 'duration': item.get('mediaDuration')}
+			for item in payload.get('messages', [])
+			if (item.get('from') == username or item.get('to') == username)
+			and item.get('mediaType') == 'audio' and item.get('mediaDuration')
+		],
 		'readMessageIds': [
 			str(item.get('id')) for item in payload.get('messages', [])
 			if item.get('read') and (item.get('from') == username or item.get('to') == username)

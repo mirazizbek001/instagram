@@ -508,6 +508,24 @@ class RegistrationTests(APITestCase):
 			{'id': 'react-message', 'reactions': {}},
 		])
 
+	def test_measured_voice_duration_replaces_inflated_metadata(self):
+		listener = User.objects.create_user(username='duration_listener', password='password123')
+		sender = User.objects.create_user(username='duration_sender', password='password123')
+		SocialState.objects.create(payload={'messages': [{
+			'id': 'duration-message', 'from': sender.username, 'to': listener.username,
+			'mediaType': 'audio', 'mediaDuration': 208, 'src': 'data:audio/webm;base64,GkXfo4GB', 't': 1,
+		}]})
+		self.client.force_login(listener)
+		response = self.client.post('/plat/social/fast/', {
+			'action': 'voice-duration', 'messageId': 'duration-message', 'duration': 3,
+		}, format='json')
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(SocialState.objects.get(pk=1).payload['messages'][0]['mediaDuration'], 3)
+		self.assertEqual(self.client.get('/plat/social/updates/?since=0').data['voiceDurations'], [
+			{'id': 'duration-message', 'duration': 3},
+		])
+
 	def test_call_log_is_delivered_into_chat_history(self):
 		caller = User.objects.create_user(username='call_caller', password='password123')
 		receiver = User.objects.create_user(username='call_receiver', password='password123')
