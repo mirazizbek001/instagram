@@ -134,8 +134,8 @@ export function AppProvider({ children }) {
   const syncChain = useRef(Promise.resolve())
   const [view, setView] = useState({ n: 'home' }); const [reelId, setReelId] = useState(null); const [createPost,setCreatePost]=useState(false); const [postId, setPostId] = useState(null); const [create, setCreate] = useState(false); const [createReel, setCreateReel] = useState(false); const [createStory, setCreateStory] = useState(false); const [storyId, setStoryId] = useState(null); const [toast, setToast] = useState(null); const [peer, setPeer] = useState(null)
   const [dark, setDark] = useState(() => localStorage.getItem('theme') !== 'light')
-  const [serviceOpen, setServiceOpen] = useState(isKidsHours())
-  const [accessInfo, setAccessInfo] = useState({ open: isKidsHours(), reason: isKidsHours() ? 'open' : 'hours', start: '08:00', end: '22:00', usageLimitMinutes: 30, cooldownMinutes: 10, usageRemainingSeconds: 1800, cooldownSeconds: 0, restriction: { active: false, until: null, remainingSeconds: 0 } })
+  const [serviceOpen, setServiceOpen] = useState(true)
+  const [accessInfo, setAccessInfo] = useState({ open: true, reason: 'loading', usageLimitMinutes: 30, cooldownMinutes: 10, usageRemainingSeconds: 1800, cooldownSeconds: 0, restriction: { active: false, until: null, remainingSeconds: 0 } })
   const [callSession, setCallSession] = useState(null)
   const [callLocalStream, setCallLocalStream] = useState(null)
   const [callRemoteStream, setCallRemoteStream] = useState(null)
@@ -273,18 +273,12 @@ export function AppProvider({ children }) {
     const checkAccess = async () => {
       if (document.hidden && meId) return
       try {
-        const response = await fetch('/plat/access/', { credentials: 'same-origin' })
+        const response = await fetch('/plat/access/', { credentials: 'same-origin', cache: 'no-store' })
         const data = await response.json()
         if (!active) return
         setAccessInfo(data)
         setServiceOpen(Boolean(data.open))
-      } catch {
-        if (active) {
-          const fallback = { ...accessInfo, open: isKidsHours(), reason: isKidsHours() ? 'open' : 'hours' }
-          setAccessInfo(fallback)
-          setServiceOpen(fallback.open)
-        }
-      }
+      } catch { /* Keep the last server-provided schedule during temporary network errors. */ }
     }
     checkAccess()
     const timer = setInterval(checkAccess, 30000)

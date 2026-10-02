@@ -129,6 +129,19 @@ class RegistrationTests(APITestCase):
 		self.assertEqual(response.status_code, 403)
 		self.assertFalse(User.objects.filter(username='admin').exists())
 
+	def test_saved_admin_hours_are_returned_by_uncached_access_status(self):
+		admin = User.objects.create_superuser(username='admin', email='admin@example.com', password='secret123')
+		self.client.force_login(admin)
+		response = self.client.put('/plat/settings/', {
+			'start': '10:30', 'end': '19:45', 'usageLimitMinutes': 30, 'cooldownMinutes': 10,
+		}, format='json')
+
+		self.assertEqual(response.status_code, 200)
+		response = self.client.get('/plat/access/')
+		self.assertEqual(response.data['start'], '10:30')
+		self.assertEqual(response.data['end'], '19:45')
+		self.assertIn('no-store', response['Cache-Control'])
+
 	def test_login_rejects_invalid_credentials(self):
 		User.objects.create_user(username='login_user', password='secret123')
 		response = self.client.post('/plat/login/', {

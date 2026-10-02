@@ -22,7 +22,7 @@ function AdminPanel() {
 
   useEffect(() => {
     if (!isAdmin) return
-    fetch('/plat/settings/', { credentials: 'same-origin' })
+    fetch('/plat/settings/', { credentials: 'same-origin', cache: 'no-store' })
       .then(async response => {
         const data = await response.json()
         if (!response.ok) throw new Error(data.error || 'Sozlamalarni olishda xatolik')
@@ -60,7 +60,7 @@ function AdminPanel() {
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Sozlamalarni saqlab bo‘lmadi')
       setSettings(data)
-      const accessResponse = await fetch('/plat/access/', { credentials: 'same-origin' })
+      const accessResponse = await fetch('/plat/access/', { credentials: 'same-origin', cache: 'no-store' })
       const accessData = accessResponse.ok ? await accessResponse.json() : data
       A.updateAccessInfo(accessData)
       A.toast('Ilova vaqtlari saqlandi ✓')

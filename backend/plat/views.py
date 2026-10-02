@@ -175,7 +175,7 @@ def access_status(request):
 		reason = 'hours'
 	elif not usage['allowed'] and not admin:
 		reason = 'cooldown'
-	return Response({
+	response = Response({
 		'open': allowed,
 		'reason': reason,
 		'cooldownSeconds': usage['remainingSeconds'] if reason == 'cooldown' else 0,
@@ -188,6 +188,8 @@ def access_status(request):
 		},
 		**settings_payload(),
 	})
+	response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+	return response
 
 
 def _closed_response(reason='hours'):
@@ -217,7 +219,9 @@ def platform_settings(request):
 		except (ValueError, TypeError):
 			return Response({'error': 'Vaqt yoki daqiqa qiymati noto‘g‘ri.'}, status=status.HTTP_400_BAD_REQUEST)
 		settings.save()
-	return Response(settings_payload())
+	response = Response(settings_payload())
+	response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+	return response
 
 @ensure_csrf_cookie
 def csrf_token(request):
