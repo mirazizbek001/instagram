@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { Home, Play, Search, Send, Heart, User, Settings } from 'lucide-react'
+import { Home, Play, Search, Send, Heart, User, Settings, RefreshCw } from 'lucide-react'
 import { AppProvider, useC } from './context/AppContext'
 import { Auth, PwaInstallButton } from './components/Shared'
 import CallOverlay from './components/CallOverlay'
@@ -13,6 +14,14 @@ import MessagesPage from './pages/MessagesPage'
 import ProfilePage from './pages/ProfilePage'
 import AdminPage from './pages/AdminPage'
 import './App.css'
+
+function PwaUpdatePrompt({ visible }) {
+  if (!visible) return null
+  return <div role="status" aria-live="polite" className="fixed right-3 top-16 z-[100] flex max-w-[calc(100vw-24px)] items-center gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3 text-sm shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+    <span className="min-w-0 flex-1">Yangi versiya tayyor</span>
+    <button onClick={() => window.dispatchEvent(new Event('instakids-activate-update'))} className="flex shrink-0 items-center gap-2 font-semibold text-sky-600 dark:text-sky-400"><RefreshCw size={16} /> Yangilash</button>
+  </div>
+}
 
 function ProfileRoute() {
   const { id } = useParams()
@@ -36,8 +45,19 @@ function AppShell() {
   const { me, A, unreadN, unreadM, accessInfo } = useC()
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const [pwaUpdateReady, setPwaUpdateReady] = useState(false)
 
-  if (!me) return <Auth A={A} accessInfo={accessInfo} />
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const showUpdate = () => setPwaUpdateReady(true)
+    window.addEventListener('instakids-update-ready', showUpdate)
+    navigator.serviceWorker.getRegistration().then(registration => {
+      if (registration?.waiting && navigator.serviceWorker.controller) showUpdate()
+    })
+    return () => window.removeEventListener('instakids-update-ready', showUpdate)
+  }, [])
+
+  if (!me) return <><Auth A={A} accessInfo={accessInfo} /><PwaUpdatePrompt visible={pwaUpdateReady} /></>
 
   const isAdmin = me.username === 'admin' || (me.username || '').toLowerCase().includes('admin') || me.isAdmin
   const nav = [
@@ -97,6 +117,7 @@ function AppShell() {
     </nav>}
     <CallOverlay />
     <Modals />
+    <PwaUpdatePrompt visible={pwaUpdateReady} />
   </div>
 }
 

@@ -58,6 +58,11 @@ server {
         default_type application/manifest+json;
         try_files $uri =404;
     }
+    location = /version.json {
+        add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0";
+        default_type application/json;
+        try_files $uri =404;
+    }
     location = /index.html {
         add_header Cache-Control "no-cache";
     }
