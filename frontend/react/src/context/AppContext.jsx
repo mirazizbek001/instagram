@@ -815,9 +815,9 @@ export function AppProvider({ children }) {
         });
         // Django sessioni haqiqiy akkauntning manbai. LocalStorage o‘chib qolgan bo‘lsa ham
         // sessiondagi akkauntni qayta tiklaymiz — foydalanuvchi qayta login qilmaydi.
-        const sessionAccount = accounts.find(
-          (account) => account.username === session.username,
-        );
+        const sessionAccount =
+          accounts.find((account) => account.username === session.username) ||
+          session;
         if (sessionAccount) {
           const localUser = dbRef.current.users.find(
             (user) => user.username === sessionAccount.username,
@@ -830,6 +830,7 @@ export function AppProvider({ children }) {
             if (existing) {
               existing.name = sessionAccount.name || existing.name;
               existing.email = sessionAccount.email || existing.email || "";
+              existing.isAdmin = Boolean(session.isAdmin);
             } else {
               d.users.push({
                 id: resolvedId,
@@ -838,6 +839,7 @@ export function AppProvider({ children }) {
                 name: sessionAccount.name || sessionAccount.username,
                 bio: "",
                 avatar: null,
+                isAdmin: Boolean(session.isAdmin),
                 t: Date.now(),
               });
             }
@@ -1226,7 +1228,11 @@ export function AppProvider({ children }) {
       save((d) => {
         const user = d.users.find((item) => item.username === username);
         if (user)
-          Object.assign(user, { name: name.trim(), email: email.trim() });
+          Object.assign(user, {
+            name: name.trim(),
+            email: email.trim(),
+            isAdmin: Boolean(account.isAdmin),
+          });
         else
           d.users.push({
             id,
@@ -1235,6 +1241,7 @@ export function AppProvider({ children }) {
             name: name.trim(),
             bio: "",
             avatar: null,
+            isAdmin: Boolean(account.isAdmin),
             t: Date.now(),
           });
       });
@@ -1251,6 +1258,7 @@ export function AppProvider({ children }) {
         if (user) {
           user.name = account.name || user.name;
           user.email = account.email || user.email || "";
+          user.isAdmin = Boolean(account.isAdmin);
         } else
           d.users.push({
             id,
@@ -1259,6 +1267,7 @@ export function AppProvider({ children }) {
             name: account.name,
             bio: "",
             avatar: null,
+            isAdmin: Boolean(account.isAdmin),
             t: Date.now(),
           });
       });

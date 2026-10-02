@@ -242,6 +242,7 @@ def session_status(request):
 		'username': user.username,
 		'email': user.email,
 		'name': user.first_name,
+		'isAdmin': _is_admin_user(user),
 		'csrfToken': get_token(request._request),
 	})
 
@@ -272,7 +273,7 @@ def register(request):
 				return _closed_response('cooldown')
 			auth_login(request._request, existing_user)
 			_record_login(request._request, existing_user)
-			return Response({'id': existing_user.id, 'username': existing_user.username, 'email': existing_user.email, 'name': existing_user.first_name, 'csrfToken': get_token(request._request)})
+			return Response({'id': existing_user.id, 'username': existing_user.username, 'email': existing_user.email, 'name': existing_user.first_name, 'isAdmin': _is_admin_user(existing_user), 'csrfToken': get_token(request._request)})
 		return Response({'error': 'Bu username band'}, status=status.HTTP_409_CONFLICT)
 	if username == 'admin':
 		return Response({'error': 'Admin akkauntini faqat server administratori yaratishi mumkin.'}, status=status.HTTP_403_FORBIDDEN)
@@ -281,7 +282,7 @@ def register(request):
 	UsageState.objects.get_or_create(user=user)
 	auth_login(request._request, user)
 	_record_login(request._request, user)
-	return Response({'id': user.id, 'username': user.username, 'email': user.email, 'name': user.first_name, 'csrfToken': get_token(request._request)}, status=status.HTTP_201_CREATED)
+	return Response({'id': user.id, 'username': user.username, 'email': user.email, 'name': user.first_name, 'isAdmin': _is_admin_user(user), 'csrfToken': get_token(request._request)}, status=status.HTTP_201_CREATED)
 
 
 @api_view(['POST'])
@@ -300,7 +301,7 @@ def login(request):
 			return _closed_response('cooldown')
 	auth_login(request._request, user)
 	_record_login(request._request, user)
-	return Response({'id': user.id, 'username': user.username, 'email': user.email, 'name': user.first_name, 'csrfToken': get_token(request._request)})
+	return Response({'id': user.id, 'username': user.username, 'email': user.email, 'name': user.first_name, 'isAdmin': admin, 'csrfToken': get_token(request._request)})
 
 
 @api_view(['GET'])

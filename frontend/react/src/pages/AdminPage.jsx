@@ -55,10 +55,7 @@ const formatTimeInput = (value) => {
 
 function AdminPanel() {
   const { db, me, A, open } = useC();
-  const isAdmin =
-    me?.username === "admin" ||
-    (me?.username || "").toLowerCase().includes("admin") ||
-    me?.isAdmin;
+  const isAdmin = me?.isAdmin;
   const [settings, setSettings] = useState({
     enabled: true,
     start: "08:00",

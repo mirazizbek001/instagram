@@ -106,10 +106,7 @@ function AppShell() {
       </>
     );
 
-  const isAdmin =
-    me.username === "admin" ||
-    (me.username || "").toLowerCase().includes("admin") ||
-    me.isAdmin;
+  const isAdmin = me.isAdmin;
   const nav = [
     ["/", Home, "Home", unreadN * 0],
     ["/reels", Play, "Reels"],

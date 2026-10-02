@@ -95,8 +95,21 @@ class RegistrationTests(APITestCase):
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data['username'], admin.username)
+		self.assertTrue(response.data['isAdmin'])
+		session_response = self.client.get('/plat/session/')
+		self.assertTrue(session_response.data['isAdmin'])
 		response = self.client.put('/plat/social/', {'posts': []}, format='json')
 		self.assertEqual(response.status_code, 200)
+
+	def test_staff_admin_flag_does_not_depend_on_username(self):
+		User.objects.create_superuser(username='root_operator', password='secret123')
+		response = self.client.post('/plat/login/', {
+			'username': 'root_operator',
+			'password': 'secret123',
+		}, format='json')
+
+		self.assertEqual(response.status_code, 200)
+		self.assertTrue(response.data['isAdmin'])
 
 	def test_admin_account_cannot_be_registered_when_platform_is_disabled(self):
 		platform_settings = PlatformSettings.get_solo()
