@@ -17,9 +17,12 @@ import './App.css'
 
 function PwaUpdatePrompt({ visible }) {
   if (!visible) return null
-  return <div role="status" aria-live="polite" className="fixed right-3 top-16 z-[100] flex max-w-[calc(100vw-24px)] items-center gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3 text-sm shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
-    <span className="min-w-0 flex-1">Yangi versiya tayyor</span>
-    <button onClick={() => window.dispatchEvent(new Event('instakids-activate-update'))} className="flex shrink-0 items-center gap-2 font-semibold text-sky-600 dark:text-sky-400"><RefreshCw size={16} /> Yangilash</button>
+  return <div className="fixed inset-x-0 top-[calc(env(safe-area-inset-top)+16px)] z-[100] px-3">
+    <div role="status" aria-live="polite" className="mx-auto flex min-h-14 w-full max-w-[360px] items-center gap-3 rounded-xl border border-neutral-200 bg-white/95 p-2.5 pl-3 text-sm shadow-[0_12px_36px_rgba(0,0,0,.22)] backdrop-blur-xl dark:border-neutral-700 dark:bg-neutral-900/95">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400"><RefreshCw size={17} /></span>
+      <span className="min-w-0 flex-1 truncate font-semibold">Yangi versiya tayyor</span>
+      <button onClick={() => window.dispatchEvent(new Event('instakids-activate-update'))} className="flex shrink-0 items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-2 font-semibold text-white transition hover:bg-sky-500"><RefreshCw size={15} /> Yangilash</button>
+    </div>
   </div>
 }
 
