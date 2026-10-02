@@ -83,7 +83,7 @@ class RegistrationTests(APITestCase):
 		self.assertEqual(response.data['username'], 'login_user')
 
 	def test_staff_admin_can_login_when_platform_is_disabled(self):
-		admin = User.objects.create_superuser(username='site_admin', email='admin@example.com', password='secret123')
+		admin = User.objects.create_superuser(username='site_admin', email='admin@gmail.com', password='secret123')
 		platform_settings = PlatformSettings.get_solo()
 		platform_settings.enabled = False
 		platform_settings.save(update_fields=['enabled'])
