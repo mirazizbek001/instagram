@@ -169,6 +169,8 @@ export function AppProvider({ children }) {
   const navigate = useNavigate()
   const dbRef = useRef(load()); const [db, setDb] = useState(dbRef.current); const [meId, setMeId] = useState(readMeId)
   const overflowStorageRef = useRef(false)
+  const skipSocialSyncRef = useRef(0)
+  const messageCursorRef = useRef(Math.max(0, ...dbRef.current.messages.map(message => Number(message.t) || 0)))
   const [suggestionSeed] = useState(() => { const next = Number(localStorage.getItem('ig_suggestion_seed') || 0) + 1; localStorage.setItem('ig_suggestion_seed', String(next)); return next })
   const [socialReadyUser, setSocialReadyUser] = useState(null)
   const syncChain = useRef(Promise.resolve())
@@ -371,10 +373,22 @@ export function AppProvider({ children }) {
     setDb(value)
     return true
   }
-  const save = fn => {
+  const save = (fn, { skipRemoteSync = false } = {}) => {
     if (meId && !serviceOpen) { say(accessInfo.reason === 'cooldown' ? `Tanaffus: ${Math.ceil((accessInfo.cooldownSeconds || accessInfo.cooldownMinutes * 60) / 60)} daqiqa.` : `Platforma yopiq: ${accessInfo.start || '08:00'}–${accessInfo.end || '22:00'}.`); return false }
     const n = structuredClone(dbRef.current); fn(n)
+    if (skipRemoteSync) skipSocialSyncRef.current += 1
     return persistDatabase(n)
+  }
+  const sendFastAction = async action => {
+    const token = await ensureCsrfToken()
+    const response = await fetch('/plat/social/fast/', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
+      body: JSON.stringify(action),
+    })
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(result.error || 'Amalni serverga yuborib bo‘lmadi.')
+    return result
   }
   useEffect(() => {
     let active = true
@@ -477,6 +491,7 @@ export function AppProvider({ children }) {
           return message.t > (hiddenCutoffs.get(peerId) || 0)
         })
         restored.messages = [...restored.messages, ...unsyncedLocalMessages]
+        messageCursorRef.current = Math.max(messageCursorRef.current, ...restored.messages.map(message => Number(message.t) || 0))
         save(d => {
           Object.assign(d, restored)
         })
@@ -491,6 +506,7 @@ export function AppProvider({ children }) {
   const me = db.users.find(u => u.id === meId); const byId = id => db.users.find(u => u.id === id)
   useEffect(() => {
     if (!me || socialReadyUser !== meId) return
+    if (skipSocialSyncRef.current) { skipSocialSyncRef.current -= 1; return }
     const run = async () => {
       try {
         const body = JSON.stringify(serializeSocialState(dbRef.current))
@@ -521,17 +537,19 @@ export function AppProvider({ children }) {
         }
         if (!response.ok) throw new Error(result.error || result.detail || 'Sinxronlash amalga oshmadi')
         if (response.ok) {
-          if (result.moderation?.length || result.rejectedMedia?.length || result.blockedMessages?.length) {
+          if (result.moderation?.length || result.rejectedMedia?.length || result.sanitizedMessages?.length || result.blockedMessages?.length) {
             const next = structuredClone(dbRef.current)
             const fields = { post: 'posts', reel: 'reels', story: 'stories', message: 'messages' }
             ;[...(result.moderation || []), ...(result.rejectedMedia || [])].forEach(item => {
               const field = fields[item.type]
               if (field) next[field] = next[field].filter(content => String(content.id) !== String(item.id))
             })
+            const sanitizedIds = new Set((result.sanitizedMessages || []).map(String))
+            next.messages.forEach(message => { if (sanitizedIds.has(String(message.id))) message.text = '' })
             const blockedIds = new Set((result.blockedMessages || []).map(String))
             next.messages = next.messages.filter(message => !blockedIds.has(String(message.id)))
             persistDatabase(next)
-            say(result.moderation?.length ? 'Kontent admin tekshiruviga yuborildi.' : result.rejectedMedia?.length ? 'Caption 7+ xavfsizlik filtri tomonidan rad etildi.' : 'Bu foydalanuvchi xabarlarni bloklagan.')
+            say(result.sanitizedMessages?.length ? 'Rasm chatga yuborildi; xavfsizlik uchun matn olib tashlandi.' : result.moderation?.length ? 'Kontent admin tekshiruviga yuborildi.' : result.rejectedMedia?.length ? 'Caption 7+ xavfsizlik filtri tomonidan rad etildi.' : 'Bu foydalanuvchi xabarlarni bloklagan.')
           }
         }
       } catch {
@@ -542,7 +560,7 @@ export function AppProvider({ children }) {
     return () => clearTimeout(timeout)
   }, [db, meId, socialReadyUser])
   const unreadN = me ? db.notifs.filter(n => n.to === me.id && !n.read).length : 0
-  const unreadM = me ? db.messages.filter(m => m.to === me.id && !m.read).length : 0
+  const unreadM = me ? new Set(db.messages.filter(m => m.to === me.id && !m.read).map(message => message.from)).size : 0
   const prevN = useRef(0)
   useEffect(() => { if (me && unreadN > prevN.current) { const n = db.notifs.find(x => x.to === me.id && !x.read), u = n && byId(n.from); if (u) say(`${u.username} ${n.type === 'follow' ? 'sizni follow qilishni boshladi' : n.type === 'like' ? 'postingizni yoqtirdi' : 'izoh qoldirdi'}`) } prevN.current = unreadN }, [unreadN])
   const notify = (d, to, type, x = {}) => { if (to !== meId) d.notifs.unshift({ id: uid(), to, from: meId, type, t: Date.now(), read: false, ...x }) }
@@ -634,7 +652,25 @@ export function AppProvider({ children }) {
     },
     toggleTheme: () => setDark(value => !value),
     updateAccessInfo: value => { setAccessInfo(current => ({ ...current, ...value })); if (typeof value.open === 'boolean') setServiceOpen(value.open) },
-    follow: id => { if (blockRestrictedAction()) return false; const had = dbRef.current.follows.some(f => f.a === meId && f.b === id), u = byId(id); save(d => { if (had) d.follows = d.follows.filter(f => !(f.a === meId && f.b === id)); else { d.follows.push({ a: meId, b: id }); notify(d, id, 'follow') } }); say(had ? `${u.username} follow’dan chiqarildi` : `Siz ${u.username} ni follow qilishni boshladingiz ✓`) },
+    follow: id => {
+      if (blockRestrictedAction()) return false
+      const user = byId(id)
+      if (!user || user.id === meId) return false
+      const had = dbRef.current.follows.some(follow => follow.a === meId && follow.b === id)
+      if (!save(d => {
+        if (had) d.follows = d.follows.filter(follow => !(follow.a === meId && follow.b === id))
+        else d.follows.push({ a: meId, b: id })
+      }, { skipRemoteSync: true })) return false
+      say(had ? `${user.username} follow’dan chiqarildi` : `Siz ${user.username} ni follow qilishni boshladingiz ✓`)
+      sendFastAction({ action: had ? 'unfollow' : 'follow', username: user.username }).catch(error => {
+        save(d => {
+          d.follows = d.follows.filter(follow => !(follow.a === meId && follow.b === id))
+          if (had) d.follows.push({ a: meId, b: id })
+        }, { skipRemoteSync: true })
+        say(error.message)
+      })
+      return true
+    },
     like: (id, kind='post') => { if (blockRestrictedAction()) return false; return save(d => {
       const arr = kind === 'reel' ? d.reels : kind === 'story' ? d.stories : d.posts
       const item = arr.find(x => x.id === id); if (!item) return
@@ -708,7 +744,23 @@ export function AppProvider({ children }) {
       if (dbRef.current.blockedUsers.includes(to) || dbRef.current.blockedByUsers.includes(to)) { say('Bu suhbatda xabar yuborib bo‘lmaydi.'); return false }
       if (kidsUnsafeText(x?.text)) { say('Haqoratli yoki 7+ ga mos bo‘lmagan xabar yuborilmadi.'); return false }
       if (x?.src) { const mediaError = kidsUnsafeDataUrl(x.src); if (mediaError) { say(mediaError); return false } }
-      return save(d => { d.messages.push({ id: uid(), from: meId, to, t: Date.now(), read: false, ...x }) })
+      const target = dbRef.current.users.find(user => user.id === to)
+      if (!target) return false
+      const message = { id: uid(), from: meId, to, t: Date.now(), read: false, ...x }
+      if (!save(d => { d.messages.push(message) }, { skipRemoteSync: true })) return false
+      sendFastAction({ action: 'message', message: { ...message, to: target.username } }).then(result => {
+        if (result.moderation?.length) {
+          save(d => { d.messages = d.messages.filter(item => String(item.id) !== String(message.id)) }, { skipRemoteSync: true })
+          say('Xabar admin tekshiruviga yuborildi.')
+        } else if (result.sanitized) {
+          save(d => { const item = d.messages.find(value => value.id === message.id); if (item) item.text = '' }, { skipRemoteSync: true })
+          say('Xabar xavfsizlik uchun tahrirlandi.')
+        }
+      }).catch(error => {
+        save(() => {})
+        say(error.message)
+      })
+      return true
     },
     editMessage: (id, text) => {
       if (blockRestrictedAction()) return false
@@ -732,44 +784,57 @@ export function AppProvider({ children }) {
     },
     refreshMessages: async () => {
       try {
-        const response = await fetch('/plat/social/', { credentials: 'same-origin', cache: 'no-store' })
+        const since = Math.max(0, messageCursorRef.current - 3000)
+        const response = await fetch(`/plat/social/updates/?since=${since}`, { credentials: 'same-origin', cache: 'no-store' })
         if (!response.ok) return
         const remote = await response.json()
         const localId = username => dbRef.current.users.find(user => user.username === username)?.id || username
         const current = dbRef.current.messages
         const currentById = new Map(current.map(message => [String(message.id), message]))
-        const remoteById = new Map(remote.messages.map(message => [String(message.id), message]))
+        const readIds = new Set((remote.readMessageIds || []).map(String))
         const incoming = remote.messages.map(message => {
           const restored = { ...message, from: localId(message.from), to: localId(message.to), hiddenFor: (message.hiddenFor || []).map(localId) }
           const local = currentById.get(String(restored.id))
-          return local?.read && !restored.read ? { ...restored, read: true } : restored
+          if (readIds.has(String(restored.id)) || local?.read) restored.read = true
+          return restored
         })
+        messageCursorRef.current = Math.max(messageCursorRef.current, ...incoming.map(message => Number(message.t) || 0))
         const deleted = remote.deletedMessages.map(message => ({ ...message, from: localId(message.from), to: localId(message.to) }))
         const hiddenChats = remote.hiddenChats.map(chat => ({ ...chat, owner: localId(chat.owner), peer: localId(chat.peer) }))
         const blockedUsers = remote.blockedUsers.map(localId)
         const blockedByUsers = remote.blockedByUsers.map(localId)
-        const changed = incoming.some(message => {
+        const follows = remote.follows.map(follow => ({ ...follow, a: localId(follow.a), b: localId(follow.b) }))
+        const oldNotifs = new Map(dbRef.current.notifs.filter(notif => notif.to === meId).map(notif => [String(notif.id), notif]))
+        const incomingNotifs = remote.notifs.map(notif => {
+          const restored = { ...notif, from: localId(notif.from), to: localId(notif.to) }
+          if (oldNotifs.get(String(restored.id))?.read) restored.read = true
+          return restored
+        })
+        const notifs = [...dbRef.current.notifs.filter(notif => notif.to !== meId), ...incomingNotifs]
+        const messagesChanged = incoming.some(message => {
           const old = currentById.get(String(message.id))
           return !old || old.read !== message.read || old.text !== message.text || old.src !== message.src || old.edited !== message.edited || JSON.stringify(old.hiddenFor || []) !== JSON.stringify(message.hiddenFor || [])
-        })
-        const pendingReadSync = current.some(message => {
-          const remoteMessage = remoteById.get(String(message.id))
-          return message.to === meId && message.read && remoteMessage && !remoteMessage.read
-        })
-        if (!changed && JSON.stringify(dbRef.current.deletedMessages) === JSON.stringify(deleted)
-          && JSON.stringify(dbRef.current.hiddenChats) === JSON.stringify(hiddenChats)
-          && JSON.stringify(dbRef.current.blockedUsers) === JSON.stringify(blockedUsers)
-          && JSON.stringify(dbRef.current.blockedByUsers) === JSON.stringify(blockedByUsers)
-          && !pendingReadSync) return
+        }) || current.some(message => readIds.has(String(message.id)) && !message.read)
+        const changed = messagesChanged
+          || JSON.stringify(dbRef.current.follows) !== JSON.stringify(follows)
+          || JSON.stringify(dbRef.current.notifs) !== JSON.stringify(notifs)
+          || JSON.stringify(dbRef.current.deletedMessages) !== JSON.stringify(deleted)
+          || JSON.stringify(dbRef.current.hiddenChats) !== JSON.stringify(hiddenChats)
+          || JSON.stringify(dbRef.current.blockedUsers) !== JSON.stringify(blockedUsers)
+          || JSON.stringify(dbRef.current.blockedByUsers) !== JSON.stringify(blockedByUsers)
+        if (!changed) return
         save(d => {
           const messages = new Map(d.messages.map(message => [message.id, message]))
           incoming.forEach(message => messages.set(message.id, message))
+          messages.forEach(message => { if (readIds.has(String(message.id))) message.read = true })
           d.messages = [...messages.values()]
           d.deletedMessages = deleted
           d.hiddenChats = hiddenChats
           d.blockedUsers = blockedUsers
           d.blockedByUsers = blockedByUsers
-        })
+          d.follows = follows
+          d.notifs = notifs
+        }, { skipRemoteSync: true })
       } catch { /* ignore */ }
     },
     deleteChat: async peerId => {
@@ -849,7 +914,13 @@ export function AppProvider({ children }) {
     endCall,
     toggleCallMute,
     toggleCallCamera,
-    readMsgs: from => save(d => { d.messages.forEach(m => { if (m.from === from && m.to === meId) m.read = true }) }),
+    readMsgs: from => {
+      const unread = dbRef.current.messages.some(message => message.from === from && message.to === meId && !message.read)
+      if (!unread || !save(d => { d.messages.forEach(message => { if (message.from === from && message.to === meId) message.read = true }) }, { skipRemoteSync: true })) return
+      const sender = dbRef.current.users.find(user => user.id === from)
+      if (sender) sendFastAction({ action: 'read', from: sender.username }).catch(() => save(() => {}))
+      else save(() => {})
+    },
     readNotifs: () => { if (dbRef.current.notifs.some(n => n.to === meId && !n.read)) save(d => { d.notifs.forEach(n => { if (n.to === meId) n.read = true }) }) },
     deleteAccount: async () => {
       try {
@@ -892,10 +963,10 @@ export function AppProvider({ children }) {
         busy = true
         try { await A.refreshMessages() } catch { /* ignore */ } finally { busy = false }
       }
-      if (active) timer = setTimeout(tick, 4000)
+      if (active) timer = setTimeout(tick, 1000)
     }
     const onVisible = () => { if (!document.hidden) tick() }
-    timer = setTimeout(tick, 4000)
+    timer = setTimeout(tick, 1000)
     document.addEventListener('visibilitychange', onVisible)
     return () => { active = false; clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible) }
   }, [meId, socialReadyUser])
@@ -903,13 +974,13 @@ export function AppProvider({ children }) {
     if (!meId || socialReadyUser !== meId) return
     let active = true
     let timer
-    let delay = 1500
+    let delay = 700
     const pollCallSignals = async () => {
       try {
         if (!document.hidden) {
           const response = await fetch('/plat/calls/signals/', { credentials: 'same-origin' })
           if (response.ok) {
-            delay = 1500
+            delay = 700
             const signals = await response.json()
             for (const signal of signals) await callSignalHandlerRef.current?.(signal)
           } else {

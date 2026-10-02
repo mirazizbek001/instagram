@@ -1,5 +1,6 @@
 import json
 import random
+import uuid
 from django.db import transaction
 import re
 import urllib.parse
@@ -403,6 +404,140 @@ def logout(request):
 	return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+@api_view(['GET'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def social_updates(request):
+	state = SocialState.objects.first()
+	payload = state.payload or {} if state else {}
+	username = request.user.username
+	deleted_messages = [
+		item for item in payload.get('deletedMessages', [])
+		if item.get('from') == username or item.get('to') == username
+	]
+	deleted_ids = {str(item.get('id')) for item in deleted_messages}
+	hidden_chats = [chat for chat in payload.get('hiddenChats', []) if chat.get('owner') == username]
+	cutoffs = {chat.get('peer'): chat.get('cutoff', 0) for chat in hidden_chats}
+	hidden_ids = {str(message_id) for chat in hidden_chats for message_id in chat.get('messageIds', [])}
+	try:
+		since = int(request.query_params.get('since', '0'))
+	except (TypeError, ValueError):
+		since = 0
+	messages = [
+		item for item in payload.get('messages', [])
+		if (item.get('from') == username or item.get('to') == username)
+		and str(item.get('id')) not in deleted_ids
+		and str(item.get('id')) not in hidden_ids
+		and item.get('t', 0) > cutoffs.get(item.get('to') if item.get('from') == username else item.get('from'), 0)
+		and item.get('t', 0) >= since
+	]
+	blocked_users = list(UserBlock.objects.filter(blocker=request.user).values_list('blocked__username', flat=True))
+	blocked_by_users = list(UserBlock.objects.filter(blocked=request.user).values_list('blocker__username', flat=True))
+	blocked_usernames = set(blocked_users) | set(blocked_by_users)
+	follows = [
+		item for item in payload.get('follows', [])
+		if item.get('a') not in blocked_usernames and item.get('b') not in blocked_usernames
+	]
+	response = Response({
+		'messages': messages,
+		'readMessageIds': [
+			str(item.get('id')) for item in payload.get('messages', [])
+			if item.get('read') and (item.get('from') == username or item.get('to') == username)
+		],
+		'deletedMessages': deleted_messages,
+		'hiddenChats': hidden_chats,
+		'blockedUsers': blocked_users,
+		'blockedByUsers': blocked_by_users,
+		'follows': follows,
+		'notifs': [item for item in payload.get('notifs', []) if item.get('to') == username],
+	})
+	response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+	return response
+
+
+@api_view(['POST'])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def social_fast_action(request):
+	data = request.data if isinstance(request.data, dict) else {}
+	action = data.get('action')
+	username = request.user.username
+	if action not in ('follow', 'unfollow', 'message', 'read'):
+		return Response({'error': 'Amal qo‘llab-quvvatlanmaydi.'}, status=status.HTTP_400_BAD_REQUEST)
+	if action != 'read' and not is_service_open() and not _is_admin_user(request.user):
+		return _closed_response()
+	restriction = _active_restriction(request.user)
+	if restriction and action in ('follow', 'unfollow', 'message'):
+		return Response({'error': 'Admin cheklovi faol.'}, status=status.HTTP_403_FORBIDDEN)
+	with transaction.atomic():
+		SocialState.objects.get_or_create(pk=1)
+		state = SocialState.objects.select_for_update().get(pk=1)
+		payload = state.payload or {}
+		follows = payload.setdefault('follows', [])
+		messages = payload.setdefault('messages', [])
+		if action in ('follow', 'unfollow'):
+			target = User.objects.filter(username=data.get('username')).first()
+			if not target or target == request.user:
+				return Response({'error': 'Foydalanuvchi topilmadi.'}, status=status.HTTP_404_NOT_FOUND)
+			if _users_block_each_other(username, target.username):
+				return Response({'error': 'Bloklangan foydalanuvchini follow qilib bo‘lmaydi.'}, status=status.HTTP_403_FORBIDDEN)
+			exists = any(item.get('a') == username and item.get('b') == target.username for item in follows)
+			if action == 'follow' and not exists:
+				follows.append({'a': username, 'b': target.username})
+				payload.setdefault('notifs', []).append({
+					'id': uuid.uuid4().hex, 'to': target.username, 'from': username,
+					'type': 'follow', 't': int(timezone.now().timestamp() * 1000), 'read': False,
+				})
+			elif action == 'unfollow':
+				payload['follows'] = [item for item in follows if not (item.get('a') == username and item.get('b') == target.username)]
+		elif action == 'read':
+			sender = str(data.get('from', ''))
+			for message in messages:
+				if message.get('from') == sender and message.get('to') == username:
+					message['read'] = True
+		else:
+			message = data.get('message')
+			if not isinstance(message, dict):
+				return Response({'error': 'Xabar ma’lumoti noto‘g‘ri.'}, status=status.HTTP_400_BAD_REQUEST)
+			message = dict(message)
+			target = User.objects.filter(username=message.get('to')).first()
+			if not target or target == request.user:
+				return Response({'error': 'Qabul qiluvchi topilmadi.'}, status=status.HTTP_404_NOT_FOUND)
+			if _users_block_each_other(username, target.username):
+				return Response({'error': 'Bu suhbatda xabar yuborib bo‘lmaydi.'}, status=status.HTTP_403_FORBIDDEN)
+			message_id = str(message.get('id') or uuid.uuid4().hex)
+			if any(str(item.get('id')) == message_id for item in messages):
+				return Response({'saved': True, 'duplicate': True})
+			message.update({'id': message_id, 'from': username, 'to': target.username, 'read': False})
+			text = str(message.get('text') or '')
+			if message.get('src'):
+				error = validate_media_item({'media': message['src']})
+				if error:
+					return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+			adult_text = suspected_adult_text(text)
+			sanitized = False
+			if adult_text and message.get('src') and message.get('mediaType') in ('image', 'video'):
+				message['text'] = ''
+				sanitized = True
+			elif adult_text:
+				moderation = _queue_moderation(request.user, 'message', message, '18+ bo‘lishi mumkin bo‘lgan xabar matni')
+				return Response({'saved': False, 'moderation': [moderation]})
+			error = validate_text(message.get('text', ''), 'Xabar')
+			if error:
+				return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+			messages.append(message)
+			state.payload = payload
+			state.save(update_fields=['payload', 'updated_at'])
+			response = Response({'saved': True, 'sanitized': sanitized, 'messageId': message_id})
+			response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+			return response
+		state.payload = payload
+		state.save(update_fields=['payload', 'updated_at'])
+	response = Response({'saved': True})
+	response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+	return response
+
+
 @api_view(['GET', 'PUT'])
 @authentication_classes([SessionAuthentication])
 @permission_classes([IsAuthenticated])
@@ -471,6 +606,7 @@ def _social_state_impl(request):
 	incoming = dict(incoming)
 	moderation_items = []
 	rejected_media = []
+	sanitized_messages = []
 	blocked_messages = []
 	restriction = _active_restriction(request.user)
 
@@ -533,8 +669,12 @@ def _social_state_impl(request):
 				if error:
 					return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
 			if changed_message and recipient and not restriction and adult_message:
-				moderation_items.append(_queue_moderation(request.user, 'message', message, '18+ bo‘lishi mumkin bo‘lgan xabar matni'))
-				continue
+				if message.get('src') and message.get('mediaType') in ('image', 'video'):
+					message['text'] = ''
+					sanitized_messages.append(str(message.get('id')))
+				else:
+					moderation_items.append(_queue_moderation(request.user, 'message', message, '18+ bo‘lishi mumkin bo‘lgan xabar matni'))
+					continue
 			if restriction and changed_message:
 				continue
 			error = validate_text(message.get('text', ''), 'Xabar')
@@ -625,7 +765,7 @@ def _social_state_impl(request):
 	payload['saved'] = saved
 	state.payload = payload
 	state.save(update_fields=['payload', 'updated_at'])
-	response = Response({'saved': True, 'moderation': moderation_items, 'rejectedMedia': rejected_media, 'blockedMessages': blocked_messages})
+	response = Response({'saved': True, 'moderation': moderation_items, 'rejectedMedia': rejected_media, 'sanitizedMessages': sanitized_messages, 'blockedMessages': blocked_messages})
 	response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
 	return response
 

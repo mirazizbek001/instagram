@@ -434,6 +434,52 @@ class RegistrationTests(APITestCase):
 		self.client.force_login(admin)
 		self.assertEqual(self.client.get('/plat/moderation/').data, [])
 
+	def test_chat_images_are_delivered_and_adult_text_is_removed_not_queued(self):
+		sender = User.objects.create_user(username='image_sender', password='password123')
+		receiver = User.objects.create_user(username='image_receiver', password='password123')
+		image_data = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jg5kAAAAASUVORK5CYII='
+		self.client.force_login(sender)
+		response = self.client.put('/plat/social/', {
+			'messages': [
+				{'id': 'plain-image', 'from': sender.username, 'to': receiver.username, 'src': image_data, 'mediaType': 'image'},
+				{'id': 'image-with-flagged-text', 'from': sender.username, 'to': receiver.username, 'src': image_data, 'mediaType': 'image', 'text': '18+ content'},
+			],
+		}, format='json')
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data['moderation'], [])
+		self.assertEqual(response.data['sanitizedMessages'], ['image-with-flagged-text'])
+		self.client.force_login(receiver)
+		received = {message['id']: message for message in self.client.get('/plat/social/').data['messages']}
+		self.assertEqual(received['plain-image']['src'], image_data)
+		self.assertEqual(received['image-with-flagged-text']['src'], image_data)
+		self.assertEqual(received['image-with-flagged-text']['text'], '')
+
+	def test_fast_social_actions_deliver_follow_and_message_updates(self):
+		sender = User.objects.create_user(username='fast_sender', password='password123')
+		receiver = User.objects.create_user(username='fast_receiver', password='password123')
+		self.client.force_login(sender)
+		response = self.client.post('/plat/social/fast/', {'action': 'follow', 'username': receiver.username}, format='json')
+		self.assertEqual(response.status_code, 200)
+
+		response = self.client.post('/plat/social/fast/', {
+			'action': 'message',
+			'message': {'id': 'fast-message', 'to': receiver.username, 'text': 'Salom', 't': 123},
+		}, format='json')
+		self.assertEqual(response.status_code, 200)
+
+		self.client.force_login(receiver)
+		response = self.client.get('/plat/social/updates/?since=0')
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data['messages'][0]['id'], 'fast-message')
+		self.assertIn({'a': sender.username, 'b': receiver.username}, response.data['follows'])
+		self.assertEqual(response.data['notifs'][0]['type'], 'follow')
+		self.assertIn('no-store', response['Cache-Control'])
+
+		response = self.client.post('/plat/social/fast/', {'action': 'read', 'from': sender.username}, format='json')
+		self.assertEqual(response.status_code, 200)
+		self.assertTrue(SocialState.objects.get(pk=1).payload['messages'][0]['read'])
+
 	def test_voice_message_is_delivered_to_recipient_without_admin_review(self):
 		sender = User.objects.create_user(username='voice_sender', password='password123')
 		receiver = User.objects.create_user(username='voice_receiver', password='password123')
