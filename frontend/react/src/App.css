@@ -67,6 +67,11 @@ html.dark .reels-page { background: #0b1224 !important; color: #fff; }
 .profile-dark-surface { background: #0b1224; color: #fff; }
 
 @media (max-width: 767px) {
+  .app-page-shell .message-page { height: calc(var(--message-viewport-height, 100dvh) - 120px); }
+  body:has(.message-composer input:focus) .app-page-shell { padding-bottom: 0 !important; }
+  body:has(.message-composer input:focus) .mobile-bottom-nav { display: none; }
+  body:has(.message-composer input:focus) .app-page-shell .message-page { height: calc(var(--message-viewport-height, 100dvh) - 56px); }
+  body:has(.message-composer input:focus) .message-composer { padding-bottom: 0.5rem; }
   .app-page-shell { margin-left: 0; }
   .ig-sidebar { display: none !important; }
   .profile-page { padding-left: 0; padding-right: 0; padding-top: 0; }

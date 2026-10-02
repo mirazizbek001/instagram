@@ -48,7 +48,17 @@ function VoiceMessagePlayer({ src, mine }) {
 
 function Messages({ peer, setPeer }) {
   const { db, me, byId, A, open, accessInfo, presenceByUser } = useC(); const [t, setT] = useState(''); const [em, setEm] = useState(false); const [q, setQ] = useState(''); const [menuMessage, setMenuMessage] = useState(null); const [messageMenuPosition, setMessageMenuPosition] = useState(null); const [chatMenu, setChatMenu] = useState(null); const [editingMessage, setEditingMessage] = useState(null); const [recording, setRecording] = useState(false); const [recordingSeconds, setRecordingSeconds] = useState(0); const messagePane = useRef(null); const recorderRef = useRef(null); const discardVoiceRef = useRef(false); const now = Date.now()
+  const [viewportHeight, setViewportHeight] = useState(() => window.visualViewport?.height || window.innerHeight)
   const restricted = Boolean(accessInfo.restriction?.active)
+  useEffect(() => {
+    const updateViewportHeight = () => setViewportHeight(window.visualViewport?.height || window.innerHeight)
+    window.visualViewport?.addEventListener('resize', updateViewportHeight)
+    window.addEventListener('resize', updateViewportHeight)
+    return () => {
+      window.visualViewport?.removeEventListener('resize', updateViewportHeight)
+      window.removeEventListener('resize', updateViewportHeight)
+    }
+  }, [])
   useEffect(() => {
     if (!recording) return
     const timer = setInterval(() => setRecordingSeconds(seconds => seconds + 1), 1000)
@@ -178,7 +188,7 @@ function Messages({ peer, setPeer }) {
     }
   }, [peer])
   const big = m => m.text && seg(m.text).length <= 3 && /^[\p{Extended_Pictographic}\u200d\ufe0f\s]+$/u.test(m.text)
-  return <div className="mx-auto flex h-[calc(100dvh-120px)] w-full overflow-hidden border-neutral-200 bg-white dark:border-[#1d2a45] dark:bg-[#0b1224] md:h-dvh md:border-x">
+  return <div style={{ '--message-viewport-height': `${viewportHeight}px` }} className="message-page mx-auto flex w-full overflow-hidden border-neutral-200 bg-white dark:border-[#1d2a45] dark:bg-[#0b1224] md:h-dvh md:border-x">
     <div className={`${peer ? 'hidden md:flex' : 'flex'} w-full flex-col border-r border-neutral-200 dark:border-neutral-800 md:w-[350px]`}>
       <div className="p-5 pb-3"><b className="text-xl">{me.username}</b><div className="relative mt-4"><Search size={16} className="absolute left-3 top-3 text-neutral-400" /><input value={q} onChange={e => setQ(e.target.value)} placeholder="Yangi xabar uchun qidirish" className="w-full rounded-lg border border-transparent bg-neutral-100 py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-neutral-500 focus:border-[#3b82f6] dark:border-[#263756] dark:bg-[#17223b] dark:placeholder:text-neutral-400" /></div></div>
       <div className="flex-1 overflow-y-auto no-scrollbar">{q ? found.map(u => <button key={u.id} onClick={() => { setPeer(u.id); setQ('') }} className="flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors hover:bg-[#eef3fc] dark:hover:bg-[#17223b]"><Av u={u} s={48} /><div><b className="block text-sm">{u.username}</b><span className="text-xs text-neutral-500">{u.name}</span></div></button>)

@@ -464,6 +464,7 @@ def _social_state_impl(request):
 		return Response({'error': 'Noto‘g‘ri ma’lumot formati'}, status=status.HTTP_400_BAD_REQUEST)
 	incoming = dict(incoming)
 	moderation_items = []
+	rejected_media = []
 	blocked_messages = []
 	restriction = _active_restriction(request.user)
 
@@ -483,7 +484,7 @@ def _social_state_impl(request):
 					return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
 				new_item = str(item.get('id')) not in existing_ids
 				if new_item and not restriction and adult_caption:
-					moderation_items.append(_queue_moderation(request.user, content_type, item, '18+ bo‘lishi mumkin bo‘lgan caption'))
+					rejected_media.append({'type': content_type, 'id': str(item.get('id'))})
 					continue
 			filtered_items.append(item)
 		incoming[key] = filtered_items
@@ -618,7 +619,7 @@ def _social_state_impl(request):
 	payload['saved'] = saved
 	state.payload = payload
 	state.save(update_fields=['payload', 'updated_at'])
-	return Response({'saved': True, 'moderation': moderation_items, 'blockedMessages': blocked_messages})
+	return Response({'saved': True, 'moderation': moderation_items, 'rejectedMedia': rejected_media, 'blockedMessages': blocked_messages})
 
 
 @api_view(['GET'])

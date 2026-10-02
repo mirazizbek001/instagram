@@ -89,7 +89,7 @@ function AppShell() {
       </Routes>
     </div>
 
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex h-14 items-center justify-around border-t border-neutral-200 bg-white dark:border-[#1d2a45] dark:bg-[#070b19] md:hidden">
+    <nav className="mobile-bottom-nav fixed inset-x-0 bottom-0 z-40 flex h-14 items-center justify-around border-t border-neutral-200 bg-white dark:border-[#1d2a45] dark:bg-[#070b19] md:hidden">
       {nav.filter(x => ['/','/reels','/messages','/search',`/profile/${me.id}`].includes(x[0]) || (isAdmin && x[0] === '/admin')).map(([path, I, , badge]) =>
         <button key={path} onClick={() => go(path)} className={`relative p-2 ${active === path ? 'text-[#f5a400]' : ''}`}><I size={26} strokeWidth={active === path ? 2.8 : 1.8} /><Badge n={badge} /></button>
       )}

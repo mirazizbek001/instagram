@@ -358,28 +358,18 @@ class RegistrationTests(APITestCase):
 		response = self.client.get('/plat/social/')
 		self.assertTrue(response.data['messages'][0]['read'])
 
-	def test_adult_post_is_held_for_admin_review_until_approved(self):
+	def test_adult_post_is_rejected_without_admin_review(self):
 		owner = User.objects.create_user(username='creator', password='password123')
-		admin = User.objects.create_superuser(username='admin', email='admin@example.com', password='password123')
 		self.client.force_login(owner)
 		response = self.client.put('/plat/social/', {
 			'posts': [{'id': 'adult-post', 'userId': 'creator', 'caption': '18+ content', 'likes': [], 'comments': []}],
 		}, format='json')
 
 		self.assertEqual(response.status_code, 200)
-		self.assertEqual(response.data['moderation'], [{'type': 'post', 'id': 'adult-post'}])
+		self.assertEqual(response.data['moderation'], [])
+		self.assertEqual(response.data['rejectedMedia'], [{'type': 'post', 'id': 'adult-post'}])
 		self.assertFalse(SocialState.objects.get(pk=1).payload.get('posts'))
-		report = ModerationReport.objects.get(content_id='adult-post')
-
-		self.client.force_login(admin)
-		response = self.client.get('/plat/moderation/')
-		self.assertEqual(response.status_code, 200)
-		self.assertEqual(response.data[0]['content']['caption'], '18+ content')
-		response = self.client.post(f'/plat/moderation/{report.id}/', {'action': 'approve'}, format='json')
-
-		self.assertEqual(response.status_code, 200)
-		self.assertEqual(ModerationReport.objects.get(pk=report.id).status, ModerationReport.APPROVED)
-		self.assertEqual(SocialState.objects.get(pk=1).payload['posts'][0]['id'], 'adult-post')
+		self.assertFalse(ModerationReport.objects.filter(content_id='adult-post').exists())
 
 	def test_adult_message_is_held_and_moderation_queue_is_admin_only(self):
 		sender = User.objects.create_user(username='sender', password='password123')

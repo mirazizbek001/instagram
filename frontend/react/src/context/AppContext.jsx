@@ -444,10 +444,10 @@ export function AppProvider({ children }) {
         }
         if (!response.ok) throw new Error(result.error || result.detail || 'Sinxronlash amalga oshmadi')
         if (response.ok) {
-          if (result.moderation?.length || result.blockedMessages?.length) {
+          if (result.moderation?.length || result.rejectedMedia?.length || result.blockedMessages?.length) {
             const next = structuredClone(dbRef.current)
             const fields = { post: 'posts', reel: 'reels', story: 'stories', message: 'messages' }
-            result.moderation.forEach(item => {
+            ;[...(result.moderation || []), ...(result.rejectedMedia || [])].forEach(item => {
               const field = fields[item.type]
               if (field) next[field] = next[field].filter(content => String(content.id) !== String(item.id))
             })
@@ -456,7 +456,7 @@ export function AppProvider({ children }) {
             dbRef.current = next
             localStorage.setItem(KEY, JSON.stringify(next))
             setDb(next)
-            say(result.moderation?.length ? 'Kontent admin tekshiruviga yuborildi.' : 'Bu foydalanuvchi xabarlarni bloklagan.')
+            say(result.moderation?.length ? 'Kontent admin tekshiruviga yuborildi.' : result.rejectedMedia?.length ? 'Caption 7+ xavfsizlik filtri tomonidan rad etildi.' : 'Bu foydalanuvchi xabarlarni bloklagan.')
           }
         }
       } catch {
