@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-/* ---------- data layer (localStorage, tabs sync live) ---------- */
-const KEY = 'ig_db_v2', ME = 'ig_me_v2'
+/* ---------- data layer (localStorage with IndexedDB overflow, tabs sync live) ---------- */
+const KEY = 'ig_db_v2', ME = 'ig_me_v2', OVERFLOW_SIGNAL = 'ig_db_overflow_signal'
 // Bir brauzer = bitta faol akkaunt. Eski versiyadagi ko‘p-akkaunt kalitlarini bir marta tozalaymiz.
 try {
   localStorage.removeItem('instakids_recent_accounts')
@@ -10,6 +10,45 @@ try {
 } catch { /* storage mavjud bo'lmasa ham ilova ishlayveradi */ }
 const EMPTY = { users: [], posts: [], reels: [], stories: [], seenStories: [], follows: [], messages: [], deletedMessages: [], hiddenChats: [], blockedUsers: [], blockedByUsers: [], notifs: [], saved: {}, searchHistory: [] }
 const load = () => { try { return { ...EMPTY, ...JSON.parse(localStorage.getItem(KEY) || '{}') } } catch { return { ...EMPTY } } }
+let overflowDatabasePromise
+const openOverflowDatabase = () => {
+  if (typeof indexedDB === 'undefined') return Promise.reject(new Error('IndexedDB mavjud emas'))
+  if (!overflowDatabasePromise) overflowDatabasePromise = new Promise((resolve, reject) => {
+    const request = indexedDB.open('instakids-local-data', 1)
+    request.onupgradeneeded = () => request.result.createObjectStore('state')
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  return overflowDatabasePromise
+}
+const readOverflowDatabase = async () => {
+  const database = await openOverflowDatabase()
+  return new Promise((resolve, reject) => {
+    const request = database.transaction('state', 'readonly').objectStore('state').get('database')
+    request.onsuccess = () => resolve(request.result || null)
+    request.onerror = () => reject(request.error)
+  })
+}
+const writeOverflowDatabase = async value => {
+  const database = await openOverflowDatabase()
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction('state', 'readwrite')
+    transaction.objectStore('state').put(value, 'database')
+    transaction.oncomplete = resolve
+    transaction.onerror = () => reject(transaction.error)
+    transaction.onabort = () => reject(transaction.error)
+  })
+}
+const clearOverflowDatabase = async () => {
+  const database = await openOverflowDatabase()
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction('state', 'readwrite')
+    transaction.objectStore('state').delete('database')
+    transaction.oncomplete = resolve
+    transaction.onerror = () => reject(transaction.error)
+    transaction.onabort = () => reject(transaction.error)
+  })
+}
 const readMeId = () => {
   try {
     const storedId = localStorage.getItem(ME)
@@ -129,6 +168,7 @@ const EMO = {
 export function AppProvider({ children }) {
   const navigate = useNavigate()
   const dbRef = useRef(load()); const [db, setDb] = useState(dbRef.current); const [meId, setMeId] = useState(readMeId)
+  const overflowStorageRef = useRef(false)
   const [suggestionSeed] = useState(() => { const next = Number(localStorage.getItem('ig_suggestion_seed') || 0) + 1; localStorage.setItem('ig_suggestion_seed', String(next)); return next })
   const [socialReadyUser, setSocialReadyUser] = useState(null)
   const syncChain = useRef(Promise.resolve())
@@ -285,13 +325,56 @@ export function AppProvider({ children }) {
     return () => { active = false; clearInterval(timer) }
   }, [meId])
   useEffect(() => { document.documentElement.classList.toggle('dark', dark); localStorage.setItem('theme', dark ? 'dark' : 'light') }, [dark])
-  useEffect(() => { const f = e => { if (e.key === KEY) { dbRef.current = load(); setDb(dbRef.current) } }; addEventListener('storage', f); return () => removeEventListener('storage', f) }, [])
+  useEffect(() => {
+    let active = true
+    const reloadDatabase = async () => {
+      try {
+        const overflow = await readOverflowDatabase()
+        if (!active) return
+        if (overflow) {
+          overflowStorageRef.current = true
+          dbRef.current = overflow
+        } else {
+          overflowStorageRef.current = false
+          dbRef.current = load()
+        }
+        setDb(dbRef.current)
+      } catch { /* Fall back to localStorage when IndexedDB is unavailable. */ }
+    }
+    const onStorage = event => { if (event.key === KEY || event.key === OVERFLOW_SIGNAL) void reloadDatabase() }
+    void reloadDatabase()
+    addEventListener('storage', onStorage)
+    return () => { active = false; removeEventListener('storage', onStorage) }
+  }, [])
   const say = m => { setToast(m); clearTimeout(say.t); say.t = setTimeout(() => setToast(null), 2600) }
+  const persistDatabase = value => {
+    const persistOverflow = () => writeOverflowDatabase(value).then(() => {
+      try { localStorage.setItem(OVERFLOW_SIGNAL, String(Date.now())) } catch { /* Other tabs will refresh on their next load. */ }
+    }).catch(() => say('Brauzer xotirasi to‘ldi. Qurilmada joy bo‘shating va qayta urinib ko‘ring.'))
+    if (overflowStorageRef.current) {
+      dbRef.current = value
+      setDb(value)
+      persistOverflow()
+      return true
+    }
+    try {
+      localStorage.setItem(KEY, JSON.stringify(value))
+    } catch {
+      overflowStorageRef.current = true
+      try { localStorage.removeItem(KEY) } catch { /* Continue with IndexedDB. */ }
+      dbRef.current = value
+      setDb(value)
+      persistOverflow()
+      return true
+    }
+    dbRef.current = value
+    setDb(value)
+    return true
+  }
   const save = fn => {
     if (meId && !serviceOpen) { say(accessInfo.reason === 'cooldown' ? `Tanaffus: ${Math.ceil((accessInfo.cooldownSeconds || accessInfo.cooldownMinutes * 60) / 60)} daqiqa.` : `Platforma yopiq: ${accessInfo.start || '08:00'}–${accessInfo.end || '22:00'}.`); return false }
-    const n = structuredClone(dbRef.current); fn(n); dbRef.current = n
-    try { localStorage.setItem(KEY, JSON.stringify(n)) } catch { say('Xotira to‘ldi — kichikroq rasm tanlang'); return false }
-    setDb(n); return true
+    const n = structuredClone(dbRef.current); fn(n)
+    return persistDatabase(n)
   }
   useEffect(() => {
     let active = true
@@ -447,9 +530,7 @@ export function AppProvider({ children }) {
             })
             const blockedIds = new Set((result.blockedMessages || []).map(String))
             next.messages = next.messages.filter(message => !blockedIds.has(String(message.id)))
-            dbRef.current = next
-            localStorage.setItem(KEY, JSON.stringify(next))
-            setDb(next)
+            persistDatabase(next)
             say(result.moderation?.length ? 'Kontent admin tekshiruviga yuborildi.' : result.rejectedMedia?.length ? 'Caption 7+ xavfsizlik filtri tomonidan rad etildi.' : 'Bu foydalanuvchi xabarlarni bloklagan.')
           }
         }
@@ -775,7 +856,7 @@ export function AppProvider({ children }) {
         const response = await fetch('/plat/delete-account/', { method: 'DELETE', credentials: 'same-origin', headers: { 'X-CSRFToken': csrfToken() } })
         const result = await response.json().catch(() => ({}))
         if (!response.ok) { say(result.error || 'Akkauntni o‘chirib bo‘lmadi'); return false }
-        localStorage.removeItem(KEY); clearMeId(); setMeId(null); setSocialReadyUser(null); dbRef.current = load(); setDb(dbRef.current); navigate('/'); return true
+        localStorage.removeItem(KEY); void clearOverflowDatabase().catch(() => {}); overflowStorageRef.current = false; clearMeId(); setMeId(null); setSocialReadyUser(null); dbRef.current = load(); setDb(dbRef.current); navigate('/'); return true
       } catch { say('Server bilan bog‘lanib bo‘lmadi'); return false }
     },
     deleteUser: async userId => {
