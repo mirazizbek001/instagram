@@ -48,10 +48,18 @@ function VoiceMessagePlayer({ src, mine }) {
 
 function Messages({ peer, setPeer }) {
   const { db, me, byId, A, open, accessInfo, presenceByUser } = useC(); const [t, setT] = useState(''); const [q, setQ] = useState(''); const [menuMessage, setMenuMessage] = useState(null); const [messageMenuPosition, setMessageMenuPosition] = useState(null); const [chatMenu, setChatMenu] = useState(null); const [editingMessage, setEditingMessage] = useState(null); const [recording, setRecording] = useState(false); const [recordingSeconds, setRecordingSeconds] = useState(0); const messagePane = useRef(null); const recorderRef = useRef(null); const discardVoiceRef = useRef(false); const now = Date.now()
-  const [viewportHeight, setViewportHeight] = useState(() => window.visualViewport?.height || window.innerHeight)
+  const [viewportMetrics, setViewportMetrics] = useState(() => {
+    const viewport = window.visualViewport
+    const height = viewport?.height || window.innerHeight
+    return { height, keyboardInset: Math.max(0, window.innerHeight - height - (viewport?.offsetTop || 0)) }
+  })
   const restricted = Boolean(accessInfo.restriction?.active)
   useEffect(() => {
-    const updateViewportHeight = () => setViewportHeight(window.visualViewport?.height || window.innerHeight)
+    const updateViewportHeight = () => {
+      const viewport = window.visualViewport
+      const height = viewport?.height || window.innerHeight
+      setViewportMetrics({ height, keyboardInset: Math.max(0, window.innerHeight - height - (viewport?.offsetTop || 0)) })
+    }
     window.visualViewport?.addEventListener('resize', updateViewportHeight)
     window.addEventListener('resize', updateViewportHeight)
     return () => {
@@ -188,7 +196,7 @@ function Messages({ peer, setPeer }) {
     }
   }, [peer])
   const big = m => m.text && seg(m.text).length <= 3 && /^[\p{Extended_Pictographic}\u200d\ufe0f\s]+$/u.test(m.text)
-  return <div style={{ '--message-viewport-height': `${viewportHeight}px` }} className="message-page mx-auto flex w-full overflow-hidden border-neutral-200 bg-white dark:border-[#1d2a45] dark:bg-[#0b1224] md:h-dvh md:border-x">
+  return <div style={{ '--message-viewport-height': `${viewportMetrics.height}px`, '--message-keyboard-inset': `${viewportMetrics.keyboardInset}px` }} className="message-page mx-auto flex w-full overflow-hidden border-neutral-200 bg-white dark:border-[#1d2a45] dark:bg-[#0b1224] md:h-dvh md:border-x">
     <div className={`${peer ? 'hidden md:flex' : 'flex'} w-full flex-col border-r border-neutral-200 dark:border-neutral-800 md:w-[350px]`}>
       <div className="p-5 pb-3"><b className="text-xl">{me.username}</b><div className="relative mt-4"><Search size={16} className="absolute left-3 top-3 text-neutral-400" /><input value={q} onChange={e => setQ(e.target.value)} placeholder="Yangi xabar uchun qidirish" className="w-full rounded-lg border border-transparent bg-neutral-100 py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-neutral-500 focus:border-[#3b82f6] dark:border-[#263756] dark:bg-[#17223b] dark:placeholder:text-neutral-400" /></div></div>
       <div className="flex-1 overflow-y-auto no-scrollbar">{q ? found.map(u => <button key={u.id} onClick={() => { setPeer(u.id); setQ('') }} className="flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors hover:bg-[#eef3fc] dark:hover:bg-[#17223b]"><Av u={u} s={48} /><div><b className="block text-sm">{u.username}</b><span className="text-xs text-neutral-500">{u.name}</span></div></button>)
@@ -216,7 +224,7 @@ function Messages({ peer, setPeer }) {
         {!ids.length && !q && <p className="p-8 text-center text-sm text-neutral-500">Suhbatlar yo‘q. Yuqoridan foydalanuvchini qidirib xobar yozing.</p>}</div></div>
     <div className={`${peer ? 'flex' : 'hidden md:flex'} relative min-w-0 flex-1 flex-col`}>{pu ? <>
       <div className="relative flex items-center gap-2 border-b border-neutral-200 px-4 py-3 dark:border-neutral-800"><button onClick={() => setPeer(null)} className="md:hidden"><ChevronLeft /></button><button onClick={() => open.profile(pu.id)} className="flex min-w-0 flex-1 items-center gap-3"><Av u={pu} s={40} /><div className="min-w-0 text-left"><b className="block truncate text-sm">{pu.name || pu.username}</b><span className={`block truncate text-xs ${peerPresence?.online && !conversationBlocked ? 'font-semibold text-sky-600 dark:text-sky-300' : 'text-neutral-500'}`}>{conversationBlocked ? (blockedByMe(peer) ? 'Siz bloklagansiz' : 'Siz bloklangansiz') : presenceLabel(peerPresence)}</span></div></button><button onClick={() => A.startCall(peer, 'audio')} disabled={conversationBlocked || restricted} aria-label="Audio qo‘ng‘iroq" title="Audio qo‘ng‘iroq" className="rounded-full p-2 text-neutral-500 transition hover:bg-neutral-100 hover:text-emerald-600 disabled:opacity-40 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"><Phone size={19} /></button><button onClick={() => A.startCall(peer, 'video')} disabled={conversationBlocked || restricted} aria-label="Video qo‘ng‘iroq" title="Video qo‘ng‘iroq" className="rounded-full p-2 text-neutral-500 transition hover:bg-neutral-100 hover:text-[#f5a400] disabled:opacity-40 dark:hover:bg-neutral-800"><Video size={19} /></button><button data-chat-menu-root onClick={() => toggleChatMenu('header', peer)} aria-label="Chat amallari" title="Chat amallari" className="rounded-full p-2 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"><MoreHorizontal size={20} /></button>{chatMenu?.type === 'header' && chatMenu.id === peer && <div data-chat-menu-root className="absolute right-3 top-14 z-30 min-w-48 overflow-hidden rounded-xl border border-neutral-200 bg-white py-1 text-sm shadow-xl dark:border-neutral-700 dark:bg-neutral-900"><button onClick={() => deleteChat(peer)} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-red-600 hover:bg-neutral-100 dark:hover:bg-neutral-800"><Trash2 size={16} /> Chatni o‘chirish</button><button onClick={() => { A.setUserBlocked(peer, !blockedByMe(peer)); setChatMenu(null) }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-neutral-100 dark:hover:bg-neutral-800"><X size={16} /> {blockedByMe(peer) ? 'Blokdan chiqarish' : 'Bloklash'}</button></div>}</div>
-      <div ref={messagePane} onScroll={() => { setMenuMessage(null); setMessageMenuPosition(null) }} className="flex-1 space-y-1 overflow-y-auto no-scrollbar px-4 py-4">{!chat.length && <div className="grid h-full place-items-center text-center"><div><div className="mx-auto w-fit"><Av u={pu} s={90} /></div><b className="mt-3 block text-xl">{pu.name}</b><span className="text-sm text-neutral-500">@{pu.username}</span><p className="mt-2 text-sm text-neutral-500">Birinchi xabarni yozing 👋</p></div></div>}
+      <div ref={messagePane} onScroll={() => { setMenuMessage(null); setMessageMenuPosition(null) }} className="message-pane flex-1 space-y-1 overflow-y-auto no-scrollbar px-4 py-4">{!chat.length && <div className="grid h-full place-items-center text-center"><div><div className="mx-auto w-fit"><Av u={pu} s={90} /></div><b className="mt-3 block text-xl">{pu.name}</b><span className="text-sm text-neutral-500">@{pu.username}</span><p className="mt-2 text-sm text-neutral-500">Birinchi xabarni yozing 👋</p></div></div>}
         {chat.map((m, i) => {
           const my = m.from === me.id, lastMine = my && i === chat.map(x => x.from).lastIndexOf(me.id)
           const prev = chat[i - 1]

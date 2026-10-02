@@ -68,8 +68,22 @@ html.dark .reels-page { background: #0b1224 !important; color: #fff; }
 
 @media (max-width: 767px) {
   .app-page-shell .message-page { height: calc(var(--message-viewport-height, 100dvh) - 120px); }
-  .conversation-open .app-page-shell .message-page { height: var(--message-viewport-height, 100dvh); }
-  .conversation-open .message-composer { padding-bottom: 0.5rem; }
+  .conversation-open .app-page-shell .message-page {
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    height: calc(var(--message-viewport-height, 100dvh) + var(--message-keyboard-inset, 0px));
+  }
+  .conversation-open .message-pane { padding-bottom: 5rem; }
+  .conversation-open .message-composer {
+    position: fixed;
+    right: 0;
+    bottom: var(--message-keyboard-inset, 0px);
+    left: 0;
+    z-index: 45;
+    margin: 0;
+    padding-bottom: 0 !important;
+  }
   .app-page-shell { margin-left: 0; }
   .ig-sidebar { display: none !important; }
   .profile-page { padding-left: 0; padding-right: 0; padding-top: 0; }
