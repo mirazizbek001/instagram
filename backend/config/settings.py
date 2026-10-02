@@ -15,6 +15,7 @@ import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_UPLOAD_MAX_MEMORY_SIZE = 40 * 1024 * 1024
 
 
 # Quick-start development settings - unsuitable for production

@@ -651,7 +651,7 @@ export function AppProvider({ children }) {
     },
     refreshMessages: async () => {
       try {
-        const response = await fetch('/plat/social/')
+        const response = await fetch('/plat/social/', { credentials: 'same-origin', cache: 'no-store' })
         if (!response.ok) return
         const remote = await response.json()
         const localId = username => dbRef.current.users.find(user => user.username === username)?.id || username

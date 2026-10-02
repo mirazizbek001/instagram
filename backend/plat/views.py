@@ -461,7 +461,9 @@ def _social_state_impl(request):
 			follow for follow in response_data['follows']
 			if follow.get('a') not in hidden_usernames and follow.get('b') not in hidden_usernames
 		]
-		return Response(response_data)
+		response = Response(response_data)
+		response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+		return response
 
 	incoming = request.data
 	if not isinstance(incoming, dict):
@@ -623,7 +625,9 @@ def _social_state_impl(request):
 	payload['saved'] = saved
 	state.payload = payload
 	state.save(update_fields=['payload', 'updated_at'])
-	return Response({'saved': True, 'moderation': moderation_items, 'rejectedMedia': rejected_media, 'blockedMessages': blocked_messages})
+	response = Response({'saved': True, 'moderation': moderation_items, 'rejectedMedia': rejected_media, 'blockedMessages': blocked_messages})
+	response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+	return response
 
 
 @api_view(['GET'])

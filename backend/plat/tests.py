@@ -1,3 +1,4 @@
+import base64
 from datetime import time, timedelta
 from django.conf import settings
 from django.test import TestCase
@@ -370,6 +371,21 @@ class RegistrationTests(APITestCase):
 		self.client.force_login(sender)
 		response = self.client.get('/plat/social/')
 		self.assertTrue(response.data['messages'][0]['read'])
+		self.assertIn('no-store', response['Cache-Control'])
+
+	def test_reel_video_larger_than_default_request_limit_can_be_published(self):
+		owner = User.objects.create_user(username='large_reel_creator', password='password123')
+		self.client.force_login(owner)
+		video = base64.b64encode(b'\x00\x00\x00\x18ftypmp42' + b'\x00' * (3 * 1024 * 1024)).decode()
+		response = self.client.put('/plat/social/', {
+			'reels': [{
+				'id': 'large-reel', 'userId': owner.username,
+				'media': f'data:video/mp4;base64,{video}', 'caption': 'Test reel', 'likes': [], 'comments': [],
+			}],
+		}, format='json')
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(SocialState.objects.get(pk=1).payload['reels'][0]['id'], 'large-reel')
 
 	def test_adult_post_is_rejected_without_admin_review(self):
 		owner = User.objects.create_user(username='creator', password='password123')
