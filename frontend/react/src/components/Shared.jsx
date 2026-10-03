@@ -249,8 +249,11 @@ export function PwaInstallButton({ compact = false, iconOnly = false }) {
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
   useEffect(() => {
-    const onInstallPromptAvailable = () =>
-      setInstallPrompt(window.__instakidsInstallPrompt || null);
+    const onInstallPromptAvailable = () => {
+      const nextPrompt = window.__instakidsInstallPrompt || null;
+      setInstallPrompt(nextPrompt);
+      if (!installed && nextPrompt) setShowHelp(true);
+    };
     const onInstalled = () => {
       window.__instakidsInstallPrompt = null;
       setInstalled(true);
