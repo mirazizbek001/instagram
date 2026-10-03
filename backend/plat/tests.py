@@ -306,6 +306,25 @@ class RegistrationTests(APITestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data['seenStories'], [{'viewerId': 'viewer', 'storyId': 'story-1'}])
 
+	def test_owner_can_upload_and_retrieve_a_story(self):
+		owner = User.objects.create_user(username='story_uploader', password='password123')
+		self.client.force_login(owner)
+		image = base64.b64encode(b'\x89PNG\r\n\x1a\n').decode('ascii')
+		story = {
+			'id': 'uploaded-story',
+			'userId': owner.username,
+			'media': f'data:image/png;base64,{image}',
+			'type': 'image',
+			'caption': 'Salom',
+			'likes': [],
+		}
+
+		response = self.client.put('/plat/social/', {'stories': [story]}, format='json')
+
+		self.assertEqual(response.status_code, 200)
+		response = self.client.get('/plat/social/')
+		self.assertEqual(response.data['stories'], [story])
+
 	def test_story_like_and_view_are_visible_to_owner_and_survive_owner_sync(self):
 		owner = User.objects.create_user(username='story_owner', password='password123')
 		viewer = User.objects.create_user(username='story_viewer', password='password123')
