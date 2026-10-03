@@ -49,3 +49,4 @@ bo‘lishi kerak.
 - Yozishmalar `SocialState` orqali server database'ida saqlanadi.
 - Railway Volume `/data` akkauntlar, sessionlar, yozishmalar va media uchun persistent storage beradi.
 - PostgreSQL ishlatilsa web service uchun SQLite Volume shart emas; media uchun Volume yoki object storage kerak.
+- `DATABASE_URL` ham, `/data` Volume ham bo‘lmasa production server ma’lumotlar yo‘qolmasligi uchun ishga tushmaydi. Railway deploy logidagi xabar bo‘yicha bittasini sozlang.

@@ -14,6 +14,14 @@ if [ -z "${DATABASE_URL:-}" ] && [ -d /data ] && [ -w /data ]; then
   fi
 fi
 
+if [ -z "${DATABASE_URL:-}" ] \
+  && [ -z "${RAILWAY_VOLUME_MOUNT_PATH:-}" ] \
+  && { [ -n "${RAILWAY_ENVIRONMENT:-}" ] || [ -n "${RAILWAY_ENVIRONMENT_NAME:-}" ]; }; then
+  echo "[InstaKids] ERROR: production database is not persistent."
+  echo "[InstaKids] Add a Railway Volume mounted at /data or configure DATABASE_URL."
+  exit 1
+fi
+
 if [ -n "${DATABASE_URL:-}" ]; then
   echo "[InstaKids] Database: PostgreSQL"
 else

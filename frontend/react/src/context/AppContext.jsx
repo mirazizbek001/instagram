@@ -644,25 +644,6 @@ export function AppProvider({ children }) {
       clearInterval(timer);
     };
   }, [meId]);
-  const accessLockRef = useRef(false);
-  useEffect(() => {
-    if (!meId || me?.isAdmin) {
-      accessLockRef.current = false;
-      return;
-    }
-    const blocked = !accessInfo.open || Boolean(accessInfo.restriction?.active);
-    if (blocked && !accessLockRef.current) {
-      accessLockRef.current = true;
-      fetch("/plat/logout/", {
-        method: "POST",
-        headers: { "X-CSRFToken": csrfToken() },
-      }).catch(() => {});
-      clearMeId();
-      setMeId(null);
-      setSocialReadyUser(null);
-    }
-    if (!blocked) accessLockRef.current = false;
-  }, [meId, me?.isAdmin, accessInfo.open, accessInfo.restriction?.active]);
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
     localStorage.setItem("theme", dark ? "dark" : "light");
@@ -777,6 +758,8 @@ export function AppProvider({ children }) {
           credentials: "same-origin",
           cache: "no-store",
         });
+        if (!sessionResponse.ok)
+          throw new Error("Server sessiyasini tekshirib bo‘lmadi");
         const session = await sessionResponse.json().catch(() => ({}));
         if (!active) return;
         if (!session.authenticated) {

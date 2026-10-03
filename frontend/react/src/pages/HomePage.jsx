@@ -41,23 +41,33 @@ function HomePage() {
                     ),
                 );
                 return (
-                  <button
+                  <div
                     key={u.id}
-                    onClick={() =>
-                      us.length ? open.story(us[0].id) : open.createStory()
-                    }
-                    className="relative flex w-[66px] shrink-0 flex-col items-center gap-1 text-xs"
+                    className="relative w-[66px] shrink-0 text-xs"
                   >
-                    <Av u={u} s={56} ring={u.id !== me.id && unseen} />
-                    {u.id === me.id && (
-                      <span className="absolute right-1 top-9 grid h-5 w-5 place-items-center rounded-full bg-black dark:bg-white dark:text-black text-white">
-                        <Plus size={13} />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        us.length ? open.story(us[0].id) : open.createStory()
+                      }
+                      className="flex w-full flex-col items-center gap-1"
+                    >
+                      <Av u={u} s={56} ring={u.id !== me.id && unseen} />
+                      <span className="w-full truncate text-center">
+                        {u.id === me.id ? "Sizning" : u.username}
                       </span>
+                    </button>
+                    {u.id === me.id && (
+                      <button
+                        type="button"
+                        aria-label="Yangi story qo‘shish"
+                        onClick={open.createStory}
+                        className="absolute right-0 top-7 grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-black text-white dark:border-[#0b1224] dark:bg-white dark:text-black"
+                      >
+                        <Plus size={13} />
+                      </button>
                     )}
-                    <span className="w-full truncate">
-                      {u.id === me.id ? "Sizning" : u.username}
-                    </span>
-                  </button>
+                  </div>
                 );
               })}
             </div>

@@ -471,7 +471,6 @@ function Messages({ peer, setPeer }) {
       setEditingMessage(null);
     } else A.send(peer, { text: t.trim() });
     setT("");
-    setEm(false);
   };
   const startVoiceRecording = async () => {
     if (

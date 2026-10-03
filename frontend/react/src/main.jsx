@@ -58,10 +58,21 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
       /* Retry on the next visibility or scheduled check. */
     }
   };
+  const reloadWhenVisible = () => {
+    if (document.visibilityState === "hidden") {
+      const onVisible = () => {
+        document.removeEventListener("visibilitychange", onVisible);
+        window.location.reload();
+      };
+      document.addEventListener("visibilitychange", onVisible, { once: true });
+      return;
+    }
+    window.location.reload();
+  };
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (!activateUpdate || refreshing) return;
     refreshing = true;
-    window.location.reload();
+    reloadWhenVisible();
   });
   window.addEventListener("instakids-activate-update", () => {
     navigator.serviceWorker.getRegistration().then((registration) => {
