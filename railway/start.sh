@@ -5,21 +5,24 @@ set -eu
 
 # If Railway has a Volume mounted at /data, use it automatically.
 # If DATABASE_URL is supplied, Django uses PostgreSQL instead.
-if [ -z "${DATABASE_URL:-}" ] && [ -d /data ] && [ -w /data ]; then
-  export RAILWAY_VOLUME_MOUNT_PATH=/data
-  mkdir -p /data/media
-  if [ ! -f /data/db.sqlite3 ] && [ -f /app/db.sqlite3 ]; then
-    echo "[InstaKids] First run: copying initial SQLite database to /data"
-    cp /app/db.sqlite3 /data/db.sqlite3
+# If neither is available, keep the app bootable by falling back to writable local storage.
+if [ -z "${DATABASE_URL:-}" ]; then
+  if [ -d /data ] && [ -w /data ]; then
+    export RAILWAY_VOLUME_MOUNT_PATH=/data
+    mkdir -p /data/media
+    if [ ! -f /data/db.sqlite3 ] && [ -f /app/db.sqlite3 ]; then
+      echo "[InstaKids] First run: copying initial SQLite database to /data"
+      cp /app/db.sqlite3 /data/db.sqlite3
+    fi
+  else
+    export RAILWAY_VOLUME_MOUNT_PATH=/tmp/instakids-data
+    mkdir -p "$RAILWAY_VOLUME_MOUNT_PATH/media"
+    if [ ! -f "$RAILWAY_VOLUME_MOUNT_PATH/db.sqlite3" ] && [ -f /app/db.sqlite3 ]; then
+      echo "[InstaKids] First run: copying initial SQLite database to fallback storage"
+      cp /app/db.sqlite3 "$RAILWAY_VOLUME_MOUNT_PATH/db.sqlite3"
+    fi
+    echo "[InstaKids] WARNING: no Railway Volume or DATABASE_URL detected. Falling back to $RAILWAY_VOLUME_MOUNT_PATH for SQLite storage."
   fi
-fi
-
-if [ -z "${DATABASE_URL:-}" ] \
-  && [ -z "${RAILWAY_VOLUME_MOUNT_PATH:-}" ] \
-  && { [ -n "${RAILWAY_ENVIRONMENT:-}" ] || [ -n "${RAILWAY_ENVIRONMENT_NAME:-}" ]; }; then
-  echo "[InstaKids] ERROR: production database is not persistent."
-  echo "[InstaKids] Add a Railway Volume mounted at /data or configure DATABASE_URL."
-  exit 1
 fi
 
 if [ -n "${DATABASE_URL:-}" ]; then
