@@ -364,6 +364,7 @@ export function AppProvider({ children }) {
   const dbRef = useRef(load());
   const [db, setDb] = useState(dbRef.current);
   const [meId, setMeId] = useState(readMeId);
+  const me = db.users.find((u) => u.id === meId);
   const overflowStorageRef = useRef(false);
   const skipSocialSyncRef = useRef(0);
   const messageCursorRef = useRef(
@@ -1000,7 +1001,6 @@ export function AppProvider({ children }) {
       active = false;
     };
   }, [meId]);
-  const me = db.users.find((u) => u.id === meId);
   const byId = (id) => db.users.find((u) => u.id === id);
   useEffect(() => {
     if (!me || socialReadyUser !== meId) return;
