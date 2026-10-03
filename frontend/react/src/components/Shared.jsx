@@ -1590,9 +1590,9 @@ function ReelsCard({ r }) {
   };
   const act = "flex flex-col items-center gap-1 transition active:scale-110";
   return (
-    <article className="relative mx-auto flex h-full min-h-[calc(100dvh-56px)] w-full max-w-[900px] snap-start items-center justify-center gap-3 px-2 py-2 md:min-h-screen md:px-4">
+    <article className="relative mx-auto flex h-full min-h-[calc(100dvh-56px)] w-full snap-start items-center justify-center px-3 py-3 md:min-h-screen">
       <div
-        className="relative aspect-[9/16] max-h-[92dvh] w-[min(52dvh,calc(100vw_-_84px),380px)] shrink-0 overflow-hidden rounded-lg bg-black text-white"
+        className="relative aspect-[9/16] max-h-full w-[min(calc(100vw-24px),calc((100dvh-80px)*9/16))] shrink-0 overflow-hidden rounded-lg bg-black text-white"
         onDoubleClick={dbl}
       >
         {r.type === "video" ? (
@@ -1637,7 +1637,7 @@ function ReelsCard({ r }) {
           />
         )}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black/70 to-transparent" />
-        <div className="absolute inset-x-3 bottom-4 space-y-2 pr-11">
+        <div className="absolute inset-x-3 bottom-4 space-y-2 pr-14">
           <div className="flex items-center gap-2">
             <button onClick={() => open.profile(u.id)}>
               <Av u={u} s={34} />
@@ -1654,7 +1654,7 @@ function ReelsCard({ r }) {
           <button
             onClick={() => setMuted(!muted)}
             aria-label={muted ? "Ovozni yoqish" : "Ovozni o‘chirish"}
-            className="absolute bottom-4 right-3 grid h-8 w-8 place-items-center rounded-full bg-black/60"
+            className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-black/60"
           >
             {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
           </button>
@@ -1665,7 +1665,7 @@ function ReelsCard({ r }) {
           </div>
         )}
       </div>
-      <div className="z-10 flex shrink-0 flex-col items-center gap-5 self-end pb-4 text-neutral-900 dark:text-white">
+      <div className="absolute bottom-16 right-5 z-10 flex flex-col items-center gap-5 text-white drop-shadow-md">
         <button
           onClick={() => A.like(r.id, "reel")}
           aria-label="Reelsga like"

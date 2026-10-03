@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { ChevronDown, ChevronUp, Play } from "lucide-react";
 import { useC } from "../context/AppContext";
 import { ReelsCard } from "../components/Shared";
@@ -6,14 +6,21 @@ import { ReelsCard } from "../components/Shared";
 function ReelsPage() {
   const { db, reelId } = useC();
   const box = useRef(null);
-  const reels = db.reels.slice().sort((a, b) => b.t - a.t);
-  if (reelId) {
-    const selected = db.reels.find((r) => r.id === reelId);
-    if (selected) {
-      const rest = reels.filter((r) => r.id !== reelId);
-      reels.splice(0, reels.length, selected, ...rest);
+  const reels = useMemo(() => {
+    const shuffled = db.reels.slice();
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
-  }
+    if (reelId) {
+      const selectedIndex = shuffled.findIndex((r) => r.id === reelId);
+      if (selectedIndex > 0) {
+        const [selected] = shuffled.splice(selectedIndex, 1);
+        shuffled.unshift(selected);
+      }
+    }
+    return shuffled;
+  }, [db.reels, reelId]);
   const go = (d) =>
     box.current?.scrollBy({
       top: d * box.current.clientHeight,

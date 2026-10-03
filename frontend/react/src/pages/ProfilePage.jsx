@@ -306,7 +306,7 @@ function Profile({ id, goChat }) {
             className="flex w-[76px] shrink-0 flex-col items-center gap-2 text-xs"
           >
             <span
-              className={`grid h-[76px] w-[76px] place-items-center rounded-full border-[3px] ${ownStories.length ? "story-ring" : "border-neutral-200 dark:border-[#26292d]"}`}
+              className={`grid h-[76px] w-[76px] place-items-center rounded-full ${ownStories.length ? "story-ring" : "border-[3px] border-neutral-200 dark:border-[#26292d]"}`}
             >
               <span className="grid h-[66px] w-[66px] place-items-center rounded-full bg-neutral-100 dark:bg-[#17191c]">
                 {ownStories.length ? (
