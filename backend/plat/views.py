@@ -424,14 +424,14 @@ def social_updates(request):
 		since = int(request.query_params.get('since', '0'))
 	except (TypeError, ValueError):
 		since = 0
-	messages = [
+	conversation_messages = [
 		item for item in payload.get('messages', [])
 		if (item.get('from') == username or item.get('to') == username)
 		and str(item.get('id')) not in deleted_ids
 		and str(item.get('id')) not in hidden_ids
 		and item.get('t', 0) > cutoffs.get(item.get('to') if item.get('from') == username else item.get('from'), 0)
-		and item.get('t', 0) >= since
 	]
+	messages = [item for item in conversation_messages if item.get('t', 0) >= since]
 	blocked_users = list(UserBlock.objects.filter(blocker=request.user).values_list('blocked__username', flat=True))
 	blocked_by_users = list(UserBlock.objects.filter(blocked=request.user).values_list('blocker__username', flat=True))
 	blocked_usernames = set(blocked_users) | set(blocked_by_users)
@@ -443,22 +443,17 @@ def social_updates(request):
 		'messages': messages,
 		'messageReactions': [
 			{'id': str(item.get('id')), 'reactions': item.get('reactions', {})}
-			for item in payload.get('messages', [])
-			if (item.get('from') == username or item.get('to') == username)
-			and str(item.get('id')) not in deleted_ids
-			and str(item.get('id')) not in hidden_ids
-			and item.get('t', 0) > cutoffs.get(item.get('to') if item.get('from') == username else item.get('from'), 0)
-			and 'reactions' in item
+			for item in conversation_messages
+			if 'reactions' in item
 		],
 		'voiceDurations': [
 			{'id': str(item.get('id')), 'duration': item.get('mediaDuration')}
-			for item in payload.get('messages', [])
-			if (item.get('from') == username or item.get('to') == username)
-			and item.get('mediaType') == 'audio' and item.get('mediaDuration')
+			for item in conversation_messages
+			if item.get('mediaType') == 'audio' and item.get('mediaDuration')
 		],
 		'readMessageIds': [
-			str(item.get('id')) for item in payload.get('messages', [])
-			if item.get('read') and (item.get('from') == username or item.get('to') == username)
+			str(item.get('id')) for item in conversation_messages
+			if item.get('read')
 		],
 		'deletedMessages': deleted_messages,
 		'hiddenChats': hidden_chats,
@@ -478,9 +473,9 @@ def social_fast_action(request):
 	data = request.data if isinstance(request.data, dict) else {}
 	action = data.get('action')
 	username = request.user.username
-	if action not in ('follow', 'unfollow', 'message', 'read', 'call-log', 'react', 'voice-duration'):
+	if action not in ('follow', 'unfollow', 'message', 'read', 'read-notifs', 'call-log', 'react', 'voice-duration'):
 		return Response({'error': 'Amal qo‘llab-quvvatlanmaydi.'}, status=status.HTTP_400_BAD_REQUEST)
-	if action not in ('read', 'call-log', 'voice-duration') and not is_service_open() and not _is_admin_user(request.user):
+	if action not in ('read', 'read-notifs', 'call-log', 'voice-duration') and not is_service_open() and not _is_admin_user(request.user):
 		return _closed_response()
 	restriction = _active_restriction(request.user)
 	if restriction and action in ('follow', 'unfollow', 'message', 'react'):
@@ -544,6 +539,10 @@ def social_fast_action(request):
 			for message in messages:
 				if message.get('from') == sender and message.get('to') == username:
 					message['read'] = True
+		elif action == 'read-notifs':
+			for notification in payload.setdefault('notifs', []):
+				if notification.get('to') == username:
+					notification['read'] = True
 		else:
 			message = data.get('message')
 			if not isinstance(message, dict):

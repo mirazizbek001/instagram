@@ -512,6 +512,10 @@ class RegistrationTests(APITestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertTrue(SocialState.objects.get(pk=1).payload['messages'][0]['read'])
 
+		response = self.client.post('/plat/social/fast/', {'action': 'read-notifs'}, format='json')
+		self.assertEqual(response.status_code, 200)
+		self.assertTrue(SocialState.objects.get(pk=1).payload['notifs'][0]['read'])
+
 	def test_message_reaction_syncs_without_returning_message_media(self):
 		reactor = User.objects.create_user(username='reactor', password='password123')
 		sender = User.objects.create_user(username='reaction_sender', password='password123')

@@ -296,39 +296,51 @@ function Messages({ peer, setPeer }) {
     },
     [],
   );
-  const deletedIds = new Set(db.deletedMessages.map((message) => message.id));
-  const mine = db.messages.filter((m) => {
-    const peerId = m.from === me.id ? m.to : m.from;
-    const hiddenChat = db.hiddenChats.find(
-      (chat) => chat.owner === me.id && chat.peer === peerId,
-    );
-    const hiddenMessage = hiddenChat?.messageIds?.some(
-      (id) => String(id) === String(m.id),
-    );
-    return (
-      (m.from === me.id || m.to === me.id) &&
-      !(m.hiddenFor || []).includes(me.id) &&
-      !deletedIds.has(m.id) &&
-      !hiddenMessage &&
-      (!hiddenChat || m.t > hiddenChat.cutoff)
-    );
-  });
-  const grouped = {};
-  mine.forEach((m) => {
-    const o = m.from === me.id ? m.to : m.from;
-    if (!grouped[o]) grouped[o] = [];
-    grouped[o].push(m);
-  });
-  const ids = Object.keys(grouped).sort(
-    (a, b) =>
-      Math.max(...grouped[b].map((m) => m.t)) -
-      Math.max(...grouped[a].map((m) => m.t)),
+  const deletedIds = new Set(
+    db.deletedMessages.map((message) => String(message.id)),
   );
-  if (peer && !ids.includes(peer)) ids.unshift(peer);
+  const hiddenChats = new Map(
+    db.hiddenChats
+      .filter((chat) => chat.owner === me.id)
+      .map((chat) => [
+        chat.peer,
+        {
+          cutoff: chat.cutoff,
+          messageIds: new Set((chat.messageIds || []).map(String)),
+        },
+      ]),
+  );
+  const conversations = new Map();
+  db.messages.forEach((message) => {
+    if (message.from !== me.id && message.to !== me.id) return;
+    if ((message.hiddenFor || []).includes(me.id)) return;
+    if (deletedIds.has(String(message.id))) return;
+    const peerId = message.from === me.id ? message.to : message.from;
+    const hiddenChat = hiddenChats.get(peerId);
+    if (hiddenChat?.messageIds.has(String(message.id))) return;
+    if (hiddenChat && message.t <= hiddenChat.cutoff) return;
+
+    let conversation = conversations.get(peerId);
+    if (!conversation) {
+      conversation = { messages: [], lastMessage: null, unread: 0 };
+      conversations.set(peerId, conversation);
+    }
+    conversation.messages.push(message);
+    if (
+      !conversation.lastMessage ||
+      message.t > conversation.lastMessage.t
+    )
+      conversation.lastMessage = message;
+    if (message.from === peerId && !message.read) conversation.unread += 1;
+  });
+  const ids = [...conversations.entries()]
+    .sort(([, first], [, second]) => second.lastMessage.t - first.lastMessage.t)
+    .map(([id]) => id);
+  if (peer && !conversations.has(peer)) ids.unshift(peer);
   const chat = peer
-    ? mine
-        .filter((m) => m.from === peer || m.to === peer)
-        .sort((a, b) => a.t - b.t)
+    ? [...(conversations.get(peer)?.messages || [])].sort(
+        (a, b) => a.t - b.t,
+      )
     : [];
   const pu = peer && byId(peer);
   useEffect(() => {
@@ -607,11 +619,9 @@ function Messages({ peer, setPeer }) {
               ))
             : ids.map((id) => {
                 const u = byId(id);
-                const messages = grouped[id] || [];
-                const lastMessage = [...messages].sort((a, b) => b.t - a.t)[0];
-                const unread = messages.filter(
-                  (m) => m.from === id && m.to === me.id && !m.read,
-                ).length;
+                const conversation = conversations.get(id);
+                const lastMessage = conversation?.lastMessage;
+                const unread = conversation?.unread || 0;
                 const previewText = lastMessage
                   ? `${lastMessage.from === me.id ? "Siz: " : ""}${lastMessage.text || (lastMessage.mediaType === "audio" ? "🎙 Ovozli xabar" : "📷 Rasm")}`
                   : "Xabar yozing";

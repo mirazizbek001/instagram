@@ -48,8 +48,14 @@ import {
 import { Av, FollowBtn } from "../components/Shared";
 
 function Notifs() {
-  const { db, me, byId, open, A } = useC();
-  const list = db.notifs.filter((n) => n.to === me.id);
+  const { db, me, open, A } = useC();
+  const list = db.notifs
+    .filter((n) => n.to === me.id)
+    .sort((a, b) => b.t - a.t);
+  const usersById = new Map(db.users.map((user) => [user.id, user]));
+  const postsById = new Map(db.posts.map((post) => [post.id, post]));
+  const reelsById = new Map(db.reels.map((reel) => [reel.id, reel]));
+  const storiesById = new Map(db.stories.map((story) => [story.id, story]));
   useEffect(() => {
     A.readNotifs();
   }, [list.length]);
@@ -63,10 +69,10 @@ function Notifs() {
     <div className="mx-auto max-w-[600px] px-4 py-8">
       <h1 className="mb-5 text-2xl font-bold">Bildirishnomalar</h1>
       {list.map((n) => {
-        const u = byId(n.from),
-          p = db.posts.find((x) => x.id === n.postId),
-          reel = db.reels.find((x) => x.id === n.reelId),
-          story = db.stories.find((x) => x.id === n.storyId);
+        const u = usersById.get(n.from),
+          p = postsById.get(n.postId),
+          reel = reelsById.get(n.reelId),
+          story = storiesById.get(n.storyId);
         if (!u) return null;
         return (
           <div

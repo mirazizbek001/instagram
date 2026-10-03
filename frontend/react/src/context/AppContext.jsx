@@ -111,6 +111,10 @@ const isAuthenticationFailure = (response, payload) =>
     ));
 const uid = () =>
   Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const callSessionId = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `call-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const csrfToken = () =>
   decodeURIComponent(
     document.cookie
@@ -154,8 +158,8 @@ const ensureCsrfToken = async (force = false) => {
   return _csrfMemo;
 };
 const serializeSocialState = (db) => {
-  const username = (id) =>
-    db.users.find((user) => user.id === id)?.username || id;
+  const usersById = new Map(db.users.map((user) => [user.id, user]));
+  const username = (id) => usersById.get(id)?.username || id;
   return {
     posts: db.posts.map((post) => ({
       ...post,
@@ -368,9 +372,9 @@ export function AppProvider({ children }) {
   const overflowStorageRef = useRef(false);
   const skipSocialSyncRef = useRef(0);
   const messageCursorRef = useRef(
-    Math.max(
+    dbRef.current.messages.reduce(
+      (cursor, message) => Math.max(cursor, Number(message.t) || 0),
       0,
-      ...dbRef.current.messages.map((message) => Number(message.t) || 0),
     ),
   );
   const [suggestionSeed] = useState(() => {
@@ -450,6 +454,9 @@ export function AppProvider({ children }) {
     updateCall(null);
   };
   const createCallPeerConnection = (session) => {
+    if (!("RTCPeerConnection" in window)) {
+      throw new Error("Bu brauzer qo‘ng‘iroq uchun WebRTCni qo‘llab-quvvatlamaydi.");
+    }
     const connection = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
@@ -525,6 +532,9 @@ export function AppProvider({ children }) {
     )
       return false;
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Bu brauzer mikrofon/kamera ruxsatini qo‘llab-quvvatlamaydi.");
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: session.mode === "video",
@@ -967,9 +977,10 @@ export function AppProvider({ children }) {
           },
         );
         restored.messages = [...restored.messages, ...unsyncedLocalMessages];
-        messageCursorRef.current = Math.max(
+        messageCursorRef.current = restored.messages.reduce(
+          (cursor, message) =>
+            Math.max(cursor, Number(message.t) || 0),
           messageCursorRef.current,
-          ...restored.messages.map((message) => Number(message.t) || 0),
         );
         save((d) => {
           Object.assign(d, restored);
@@ -1189,7 +1200,7 @@ export function AppProvider({ children }) {
       return false;
     }
     const session = {
-      id: crypto.randomUUID(),
+      id: callSessionId(),
       peerId,
       mode,
       direction: "outgoing",
@@ -1199,6 +1210,9 @@ export function AppProvider({ children }) {
       cameraOff: false,
     };
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Bu brauzer mikrofon/kamera ruxsatini qo‘llab-quvvatlamaydi.");
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: mode === "video",
@@ -1811,9 +1825,9 @@ export function AppProvider({ children }) {
             restored.mediaDuration = durationUpdates.get(String(restored.id));
           return restored;
         });
-        messageCursorRef.current = Math.max(
+        messageCursorRef.current = incoming.reduce(
+          (cursor, message) => Math.max(cursor, Number(message.t) || 0),
           messageCursorRef.current,
-          ...incoming.map((message) => Number(message.t) || 0),
         );
         const deleted = remote.deletedMessages.map((message) => ({
           ...message,
@@ -2064,11 +2078,20 @@ export function AppProvider({ children }) {
       else save(() => {});
     },
     readNotifs: () => {
-      if (dbRef.current.notifs.some((n) => n.to === meId && !n.read))
-        save((d) => {
-          d.notifs.forEach((n) => {
-            if (n.to === meId) n.read = true;
-          });
+      if (
+        dbRef.current.notifs.some((n) => n.to === meId && !n.read) &&
+        save(
+          (d) => {
+            d.notifs.forEach((n) => {
+              if (n.to === meId) n.read = true;
+            });
+          },
+          { skipRemoteSync: true },
+        )
+      )
+        sendFastAction({ action: "read-notifs" }).catch((error) => {
+          save(() => {});
+          say(error.message || "Bildirishnomalarni saqlab bo‘lmadi");
         });
     },
     deleteAccount: async () => {
@@ -2185,7 +2208,7 @@ export function AppProvider({ children }) {
     if (!meId || socialReadyUser !== meId) return;
     let active = true;
     let timer;
-    let delay = 700;
+    let delay = 2000;
     const pollCallSignals = async () => {
       try {
         if (!document.hidden) {
@@ -2193,10 +2216,10 @@ export function AppProvider({ children }) {
             credentials: "same-origin",
           });
           if (response.ok) {
-            delay = 700;
             const signals = await response.json();
             for (const signal of signals)
               await callSignalHandlerRef.current?.(signal);
+            delay = callRef.current ? 700 : 2000;
           } else {
             if (response.status === 403) {
               const result = await response.json().catch(() => ({}));
@@ -2272,17 +2295,14 @@ export function AppProvider({ children }) {
       clearTimeout(timer);
     };
   }, [meId, socialReadyUser]);
+  const followedIds = new Set(
+    db.follows.filter((follow) => follow.a === me?.id).map((follow) => follow.b),
+  );
   const feed = db.posts
-    .filter(
-      (p) =>
-        p.userId === me?.id ||
-        db.follows.some((f) => f.a === me?.id && f.b === p.userId),
-    )
+    .filter((post) => post.userId === me?.id || followedIds.has(post.userId))
     .sort((a, b) => b.t - a.t);
   const suggestionPool = db.users.filter(
-    (u) =>
-      u.id !== me?.id &&
-      !db.follows.some((f) => f.a === me?.id && f.b === u.id),
+    (user) => user.id !== me?.id && !followedIds.has(user.id),
   );
   const suggestionOffset = suggestionPool.length
     ? suggestionSeed % suggestionPool.length
