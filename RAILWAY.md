@@ -49,7 +49,7 @@ python manage.py migrate
 python manage.py createsuperuser
 ```
 
-Console ham `/data` Volume’ni avtomatik aniqlaydi, shuning uchun admin akkaunt server ishlatayotgan bazada yaratiladi.
+Console `/data` Volume’ni, Volume ulanmagan bo‘lsa serverning vaqtinchalik SQLite yo‘lini avtomatik aniqlaydi. `DATABASE_URL` yoki `/data` Volume sozlanmaganida ma’lumotlar deploy/restartda yo‘qolishi mumkinligi haqidagi ogohlantirish qoladi; bu buyruq xatosi emas.
 
 ## 5. Muhim
 

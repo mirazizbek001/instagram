@@ -15,20 +15,20 @@ if [ -z "${DATABASE_URL:-}" ]; then
       cp /app/db.sqlite3 /data/db.sqlite3
     fi
   else
-    export RAILWAY_VOLUME_MOUNT_PATH=/tmp/instakids-data
-    mkdir -p "$RAILWAY_VOLUME_MOUNT_PATH/media"
-    if [ ! -f "$RAILWAY_VOLUME_MOUNT_PATH/db.sqlite3" ] && [ -f /app/db.sqlite3 ]; then
+    export INSTA_KIDS_DATA_PATH=/tmp/instakids-data
+    mkdir -p "$INSTA_KIDS_DATA_PATH/media"
+    if [ ! -f "$INSTA_KIDS_DATA_PATH/db.sqlite3" ] && [ -f /app/db.sqlite3 ]; then
       echo "[InstaKids] First run: copying initial SQLite database to fallback storage"
-      cp /app/db.sqlite3 "$RAILWAY_VOLUME_MOUNT_PATH/db.sqlite3"
+      cp /app/db.sqlite3 "$INSTA_KIDS_DATA_PATH/db.sqlite3"
     fi
-    echo "[InstaKids] WARNING: no Railway Volume or DATABASE_URL detected. Falling back to $RAILWAY_VOLUME_MOUNT_PATH for SQLite storage."
+    echo "[InstaKids] WARNING: no Railway Volume or DATABASE_URL detected. Falling back to $INSTA_KIDS_DATA_PATH for SQLite storage."
   fi
 fi
 
 if [ -n "${DATABASE_URL:-}" ]; then
   echo "[InstaKids] Database: PostgreSQL"
 else
-  echo "[InstaKids] Database: SQLite (${RAILWAY_VOLUME_MOUNT_PATH:-/app})"
+  echo "[InstaKids] Database: SQLite (${RAILWAY_VOLUME_MOUNT_PATH:-${INSTA_KIDS_DATA_PATH:-/app}})"
   if [ -z "${RAILWAY_VOLUME_MOUNT_PATH:-}" ]; then
     echo "[InstaKids] WARNING: no Railway Volume detected; SQLite data will be ephemeral."
   fi

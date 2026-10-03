@@ -22,17 +22,23 @@ def _volume_mount_path():
     configured_path = os.getenv('RAILWAY_VOLUME_MOUNT_PATH', '').strip()
     if configured_path:
         return Path(configured_path)
-    railway_environment = (
-        os.getenv('RAILWAY_ENVIRONMENT', '').strip()
-        or os.getenv('RAILWAY_ENVIRONMENT_NAME', '').strip()
-    )
     default_path = Path('/data')
-    if railway_environment and default_path.is_dir() and os.access(default_path, os.W_OK):
+    if default_path.is_dir() and os.access(default_path, os.W_OK):
         return default_path
     return None
 
 
 VOLUME_MOUNT_PATH = _volume_mount_path()
+_configured_data_path = os.getenv('INSTA_KIDS_DATA_PATH', '').strip()
+_fallback_data_path = Path('/tmp/instakids-data')
+if VOLUME_MOUNT_PATH:
+    DATA_STORAGE_PATH = VOLUME_MOUNT_PATH
+elif _configured_data_path:
+    DATA_STORAGE_PATH = Path(_configured_data_path)
+elif _fallback_data_path.is_dir() and os.access(_fallback_data_path, os.W_OK):
+    DATA_STORAGE_PATH = _fallback_data_path
+else:
+    DATA_STORAGE_PATH = BASE_DIR
 
 
 # Quick-start development settings - unsuitable for production
@@ -153,7 +159,7 @@ def _database():
             'CONN_MAX_AGE': 60,
             'CONN_HEALTH_CHECKS': True,
         }
-    path = VOLUME_MOUNT_PATH / 'db.sqlite3' if VOLUME_MOUNT_PATH else BASE_DIR / 'db.sqlite3'
+    path = DATA_STORAGE_PATH / 'db.sqlite3'
     return {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': path,
@@ -212,7 +218,7 @@ GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '').strip()
 
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = (VOLUME_MOUNT_PATH / 'media') if VOLUME_MOUNT_PATH else (BASE_DIR / 'media')
+MEDIA_ROOT = DATA_STORAGE_PATH / 'media'
 
 # Ma'lumot deploydan keyin saqlanib qoladimi? (Postgres yoki Volume bo'lsa — ha)
 DATA_PERSISTENT = bool(os.getenv('DATABASE_URL', '').strip() or VOLUME_MOUNT_PATH)
