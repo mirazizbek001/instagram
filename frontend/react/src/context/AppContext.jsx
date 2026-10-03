@@ -1131,6 +1131,49 @@ export function AppProvider({ children }) {
     );
     return true;
   };
+  const logCallMessage = async (session, status) => {
+    if (!session || !session.peerId || !meId) return false;
+    const target = dbRef.current.users.find((user) => user.id === session.peerId);
+    if (!target) return false;
+    const duration =
+      session.connectedAt && Number.isFinite(session.connectedAt)
+        ? Math.max(
+            0,
+            Math.min(86400, Math.round((Date.now() - session.connectedAt) / 1000)),
+          )
+        : 0;
+    const message = {
+      id: uid(),
+      from: meId,
+      to: session.peerId,
+      text: "",
+      t: Date.now(),
+      read: false,
+      callEvent: {
+        mode: session.mode || "audio",
+        status,
+        duration,
+      },
+    };
+    if (!save((d) => d.messages.push(message), { skipRemoteSync: true }))
+      return false;
+    try {
+      await sendFastAction({
+        action: "call-log",
+        message: { ...message, to: target.username },
+      });
+      return true;
+    } catch (error) {
+      save(
+        (d) => {
+          d.messages = d.messages.filter((item) => item.id !== message.id);
+        },
+        { skipRemoteSync: true },
+      );
+      say(error.message);
+      return false;
+    }
+  };
   const startCall = async (peerId, mode) => {
     if (callRef.current) {
       say("Boshqa qo‘ng‘iroq davom etmoqda.");
@@ -1182,12 +1225,14 @@ export function AppProvider({ children }) {
   const endCall = async () => {
     const session = callRef.current;
     if (!session) return;
+    await logCallMessage(session, "ended");
     await postCallSignal(session, "end").catch(() => {});
     closeCall();
   };
   const rejectCall = async () => {
     const session = callRef.current;
     if (!session) return;
+    await logCallMessage(session, "declined");
     await postCallSignal(session, "reject").catch(() => {});
     closeCall();
   };
