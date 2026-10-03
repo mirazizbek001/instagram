@@ -2353,11 +2353,18 @@ export function AppProvider({ children }) {
   const followedIds = new Set(
     db.follows.filter((follow) => follow.a === me?.id).map((follow) => follow.b),
   );
+  const blockedIds = new Set([
+    ...db.blockedUsers,
+    ...db.blockedByUsers,
+  ]);
   const feed = db.posts
-    .filter((post) => post.userId === me?.id || followedIds.has(post.userId))
+    .filter((post) => !blockedIds.has(post.userId))
     .sort((a, b) => b.t - a.t);
   const suggestionPool = db.users.filter(
-    (user) => user.id !== me?.id && !followedIds.has(user.id),
+    (user) =>
+      user.id !== me?.id &&
+      !followedIds.has(user.id) &&
+      !blockedIds.has(user.id),
   );
   const suggestionOffset = suggestionPool.length
     ? suggestionSeed % suggestionPool.length
@@ -2392,6 +2399,7 @@ export function AppProvider({ children }) {
         A,
         open,
         feed,
+        blockedIds,
         suggestions,
         dark,
         reelId,

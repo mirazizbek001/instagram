@@ -648,6 +648,11 @@ def _social_state_impl(request):
 		response_data['blockedUsers'] = blocked_users
 		response_data['blockedByUsers'] = blocked_by_users
 		hidden_usernames = set(blocked_users) | set(blocked_by_users)
+		for key in ('posts', 'reels', 'stories'):
+			response_data[key] = [
+				item for item in response_data[key]
+				if item.get('userId') not in hidden_usernames
+			]
 		response_data['follows'] = [
 			follow for follow in response_data['follows']
 			if follow.get('a') not in hidden_usernames and follow.get('b') not in hidden_usernames

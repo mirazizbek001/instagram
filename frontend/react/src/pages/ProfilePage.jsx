@@ -66,7 +66,7 @@ function Profile({ id, goChat }) {
     !own &&
     (db.blockedUsers.includes(u.id) || db.blockedByUsers.includes(u.id));
   const posts = db.posts
-    .filter((p) => p.userId === u.id)
+    .filter((p) => p.userId === u.id && !connectionHidden)
     .sort((a, b) => b.t - a.t);
   const savedPosts = (db.saved[me.id] || [])
     .map(
@@ -95,10 +95,13 @@ function Profile({ id, goChat }) {
       .includes(connectionSearch.trim().toLowerCase()),
   );
   const ownStories = db.stories
-    .filter((story) => story.userId === u.id && story.t > oneDayAgo)
+    .filter(
+      (story) =>
+        story.userId === u.id && story.t > oneDayAgo && !connectionHidden,
+    )
     .sort((a, b) => a.t - b.t);
   const profileReels = db.reels
-    .filter((reel) => reel.userId === u.id)
+    .filter((reel) => reel.userId === u.id && !connectionHidden)
     .sort((a, b) => b.t - a.t);
   const visiblePosts =
     tab === "saved" ? savedPosts : tab === "posts" ? posts : [];

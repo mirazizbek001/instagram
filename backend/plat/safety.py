@@ -40,8 +40,11 @@ def is_service_open(now=None):
     settings = get_platform_settings()
     if not settings.enabled:
         return False
-    now = now or timezone.localtime()
-    current = now.time()
+    if now is None:
+        now = timezone.localtime()
+    elif timezone.is_aware(now):
+        now = timezone.localtime(now)
+    current = now.time().replace(tzinfo=None)
     start = settings.open_time
     end = settings.close_time
     if start == end:

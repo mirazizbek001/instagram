@@ -430,6 +430,14 @@ function Auth({ A, accessInfo }) {
           );
           return;
         }
+        window.dispatchEvent(
+          new CustomEvent("instakids-save-login", {
+            detail: {
+              username: String(f.username || "").trim().toLowerCase(),
+              password: f.password,
+            },
+          }),
+        );
         A.login(f, result);
       } catch {
         setErr(
@@ -454,6 +462,14 @@ function Auth({ A, accessInfo }) {
         );
         return;
       }
+      window.dispatchEvent(
+        new CustomEvent("instakids-save-login", {
+          detail: {
+            username: String(f.username || "").trim().toLowerCase(),
+            password: f.password,
+          },
+        }),
+      );
       A.register(f, result);
     } catch {
       setErr(
@@ -532,7 +548,9 @@ function Auth({ A, accessInfo }) {
             )}
             <input
               className={inp}
+              name="username"
               placeholder="Username"
+              autoComplete="username"
               value={f.username}
               onChange={(e) =>
                 setF({
@@ -554,8 +572,10 @@ function Auth({ A, accessInfo }) {
             <div className="relative">
               <input
                 className={inp + " pr-11"}
+                name="password"
                 type={showPassword ? "text" : "password"}
                 placeholder="Parol"
+                autoComplete={reg ? "new-password" : "current-password"}
                 value={f.password}
                 onChange={(e) => setF({ ...f, password: e.target.value })}
               />
@@ -703,7 +723,8 @@ function PostCard({ p }) {
             {p.userId === me.id && (
               <button
                 onClick={() => {
-                  A.del(p.id);
+                  if (window.confirm("Bu postni o‘chirmoqchimisiz?"))
+                    A.del(p.id);
                   setMenu(false);
                 }}
                 className="flex w-full items-center gap-2 px-4 py-3 font-semibold text-red-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
@@ -1542,7 +1563,7 @@ function ReelMenu({ r, size = 24, up = false, showOpen = false }) {
             {own ? (
               <button
                 onClick={run(() => {
-                  if (window.confirm("Bu Reelsni o‘chirasizmi?"))
+                  if (window.confirm("Bu videoni o‘chirmoqchimisiz?"))
                     A.delReel(r.id);
                 })}
                 className={item + " font-semibold text-red-500"}

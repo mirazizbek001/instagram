@@ -7,7 +7,8 @@ function ReelsPage() {
   const { db, reelId } = useC();
   const box = useRef(null);
   const reels = useMemo(() => {
-    const shuffled = db.reels.slice();
+    const blockedIds = new Set([...db.blockedUsers, ...db.blockedByUsers]);
+    const shuffled = db.reels.filter((reel) => !blockedIds.has(reel.userId));
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
@@ -20,7 +21,7 @@ function ReelsPage() {
       }
     }
     return shuffled;
-  }, [db.reels, reelId]);
+  }, [db.reels, db.blockedUsers, db.blockedByUsers, reelId]);
   const go = (d) =>
     box.current?.scrollBy({
       top: d * box.current.clientHeight,

@@ -48,9 +48,9 @@ import {
 import { Grid } from "../components/Shared";
 
 function Explore() {
-  const { db, me } = useC();
+  const { db, me, blockedIds } = useC();
   const ps = db.posts
-    .filter((p) => p.userId !== me.id)
+    .filter((post) => post.userId !== me.id && !blockedIds.has(post.userId))
     .sort((a, b) => b.t - a.t);
   return (
     <div className="mx-auto max-w-[935px] px-1 py-6 sm:px-5">

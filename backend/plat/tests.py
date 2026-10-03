@@ -1,12 +1,12 @@
 import base64
-from datetime import time, timedelta
+from datetime import datetime, time, timedelta
 from django.conf import settings
 from django.test import TestCase
 from django.utils import timezone
 from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
 from .models import ModerationReport, PlatformSettings, SocialState, UserBlock, UserPresence, UserRestriction
-from .safety import suspected_adult_text
+from .safety import is_service_open, suspected_adult_text
 
 
 class RegistrationTests(APITestCase):
@@ -26,6 +26,38 @@ class RegistrationTests(APITestCase):
 	def test_vite_dev_server_is_trusted_for_csrf(self):
 		self.assertIn('http://localhost:5173', settings.CSRF_TRUSTED_ORIGINS)
 		self.assertIn('http://127.0.0.1:5173', settings.CSRF_TRUSTED_ORIGINS)
+
+	def test_platform_hours_use_tashkent_time_for_aware_and_local_datetimes(self):
+		platform_settings = PlatformSettings.get_solo()
+		platform_settings.open_time = time(8, 0)
+		platform_settings.close_time = time(22, 0)
+		platform_settings.save(update_fields=['open_time', 'close_time'])
+
+		utc = timezone.get_fixed_timezone(0)
+		self.assertTrue(is_service_open(timezone.make_aware(datetime(2026, 10, 3, 3, 0), utc)))
+		self.assertFalse(is_service_open(timezone.make_aware(datetime(2026, 10, 3, 17, 0), utc)))
+		self.assertTrue(is_service_open(datetime(2026, 10, 3, 8, 0)))
+		self.assertFalse(is_service_open(datetime(2026, 10, 3, 22, 0)))
+
+	def test_overnight_platform_hours_include_after_midnight(self):
+		platform_settings = PlatformSettings.get_solo()
+		platform_settings.open_time = time(20, 0)
+		platform_settings.close_time = time(6, 0)
+		platform_settings.save(update_fields=['open_time', 'close_time'])
+
+		self.assertTrue(is_service_open(datetime(2026, 10, 3, 23, 0)))
+		self.assertTrue(is_service_open(datetime(2026, 10, 4, 5, 59)))
+		self.assertFalse(is_service_open(datetime(2026, 10, 4, 6, 0)))
+
+	def test_global_platform_hours_apply_to_every_user(self):
+		first = User.objects.create_user(username='first_user', password='password123')
+		second = User.objects.create_user(username='second_user', password='password123')
+		for user in (first, second):
+			self.client.force_login(user)
+			response = self.client.get('/plat/access/')
+			self.assertTrue(response.data['open'])
+			self.assertEqual(response.data['start'], '00:00')
+			self.assertEqual(response.data['end'], '00:00')
 
 	def test_session_endpoint_is_safe_when_logged_out(self):
 		response = self.client.get('/plat/session/')
@@ -90,7 +122,7 @@ class RegistrationTests(APITestCase):
 
 		response = self.client.post('/plat/login/', {
 			'username': admin.username,
-			'password': 'secret123',
+			'password': 'iminov',
 		}, format='json')
 
 		self.assertEqual(response.status_code, 200)
@@ -209,6 +241,34 @@ class RegistrationTests(APITestCase):
 		response = self.client.get('/plat/social/')
 
 		self.assertEqual(response.status_code, 403)
+
+	def test_social_feed_returns_non_followed_content_and_hides_blocked_accounts(self):
+		viewer = User.objects.create_user(username='viewer', password='password123')
+		User.objects.create_user(username='not_followed', password='password123')
+		blocked = User.objects.create_user(username='blocked_author', password='password123')
+		blocker = User.objects.create_user(username='blocker_author', password='password123')
+		UserBlock.objects.create(blocker=viewer, blocked=blocked)
+		UserBlock.objects.create(blocker=blocker, blocked=viewer)
+		SocialState.objects.create(payload={
+			'posts': [
+				{'id': 'public-post', 'userId': 'not_followed'},
+				{'id': 'blocked-post', 'userId': 'blocked_author'},
+				{'id': 'blocker-post', 'userId': 'blocker_author'},
+			],
+			'reels': [
+				{'id': 'public-reel', 'userId': 'not_followed'},
+				{'id': 'blocked-reel', 'userId': 'blocked_author'},
+				{'id': 'blocker-reel', 'userId': 'blocker_author'},
+			],
+		})
+		self.client.force_login(viewer)
+
+		response = self.client.get('/plat/social/')
+
+		self.assertEqual([item['id'] for item in response.data['posts']], ['public-post'])
+		self.assertEqual([item['id'] for item in response.data['reels']], ['public-reel'])
+		self.assertEqual(response.data['blockedUsers'], ['blocked_author'])
+		self.assertEqual(response.data['blockedByUsers'], ['blocker_author'])
 
 	def test_social_state_saves_and_returns_owner_data_without_other_private_messages(self):
 		owner = User.objects.create_user(username='owner', password='password123')

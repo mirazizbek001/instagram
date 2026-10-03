@@ -3,17 +3,13 @@ import { useC } from "../context/AppContext";
 import { Av, FollowBtn, PostCard, HomeReelCard } from "../components/Shared";
 
 function HomePage() {
-  const { db, me, open, feed, suggestions } = useC();
+  const { db, me, open, feed, suggestions, blockedIds } = useC();
   const now = Date.now();
   const oneDayAgo = now - 864e5;
   const homeItems = [
     ...feed.map((item) => ({ ...item, kind: "post" })),
     ...db.reels
-      .filter(
-        (r) =>
-          r.userId === me.id ||
-          db.follows.some((f) => f.a === me.id && f.b === r.userId),
-      )
+      .filter((reel) => !blockedIds.has(reel.userId))
       .map((item) => ({ ...item, kind: "reel" })),
   ].sort((a, b) => b.t - a.t);
   const activeStories = db.stories.filter((s) => s.t > oneDayAgo);
