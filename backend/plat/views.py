@@ -326,10 +326,12 @@ def login_activity(request):
 @permission_classes([AllowAny])
 def users(request):
 	accounts = User.objects.filter(is_active=True).exclude(is_staff=True).exclude(is_superuser=True).order_by('username')
-	return Response([
+	response = Response([
 		{'id': user.id, 'username': user.username, 'name': user.first_name}
 		for user in accounts
 	])
+	response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+	return response
 
 
 @api_view(['DELETE'])

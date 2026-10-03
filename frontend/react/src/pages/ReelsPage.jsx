@@ -44,7 +44,7 @@ function ReelsPage() {
   return (
     <div
       ref={box}
-      className="reels-page h-[calc(100dvh-56px)] snap-y snap-mandatory overflow-y-auto no-scrollbar md:h-screen"
+      className="reels-page h-[calc(100dvh-112px)] snap-y snap-mandatory overflow-y-auto overscroll-y-contain no-scrollbar md:h-screen"
     >
       {reels.length ? (
         reels.map((r) => <ReelsCard key={r.id} r={r} />)

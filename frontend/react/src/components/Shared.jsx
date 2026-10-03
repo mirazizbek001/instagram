@@ -1411,22 +1411,38 @@ function useVideoAutoplay(ref, muted, setMuted, threshold, key, autoPlay = true)
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
+    const stopVideo = () => {
+      v.pause();
+      if (document.pictureInPictureElement === v)
+        document.exitPictureInPicture().catch(() => {});
+    };
     const io = new IntersectionObserver(
       ([e]) => {
-        if (autoPlay && e.isIntersecting && e.intersectionRatio >= threshold)
+        const visible = e.isIntersecting && e.intersectionRatio >= threshold;
+        if (!visible) {
+          stopVideo();
+          return;
+        }
+        if (autoPlay)
           v.play().catch(() => {
             v.muted = true;
             setMuted(true);
             v.play().catch(() => {});
           });
-        else v.pause();
       },
       { threshold: [0, threshold] },
     );
+    const onVisibilityChange = () => {
+      if (document.hidden) stopVideo();
+    };
     io.observe(v);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pagehide", stopVideo);
     return () => {
       io.disconnect();
-      v.pause();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pagehide", stopVideo);
+      stopVideo();
     };
   }, [key, autoPlay]);
 }
@@ -1611,9 +1627,9 @@ function ReelsCard({ r }) {
   };
   const act = "flex flex-col items-center gap-1 transition active:scale-110";
   return (
-    <article className="relative mx-auto flex h-full min-h-[calc(100dvh-56px)] w-full snap-start items-center justify-center px-3 py-3 md:min-h-screen">
+    <article className="relative mx-auto flex h-full min-h-[calc(100dvh-112px)] w-full snap-start items-center justify-center px-3 py-3 md:min-h-screen">
       <div
-        className="relative aspect-[9/16] max-h-[calc(100dvh-80px)] w-[min(calc(100vw-24px),calc((100dvh-80px)*9/16))] shrink-0 overflow-hidden rounded-lg bg-black text-white md:max-h-[calc(100dvh-24px)] md:w-[min(calc(100vw-24px),calc((100dvh-24px)*9/16))]"
+        className="relative h-full max-h-full w-full shrink-0 overflow-hidden rounded-lg bg-black text-white md:aspect-[9/16] md:h-auto md:max-h-[calc(100dvh-24px)] md:w-[min(calc(100vw-24px),calc((100dvh-24px)*9/16))]"
         onDoubleClick={dbl}
       >
         {r.type === "video" ? (
@@ -1623,6 +1639,9 @@ function ReelsCard({ r }) {
             preload="none"
             loop
             playsInline
+            disablePictureInPicture
+            disableRemotePlayback
+            data-reels-video
             muted={muted}
             aria-label="Reels videosini pauza qilish yoki davom ettirish"
             onTimeUpdate={tick}
@@ -1631,16 +1650,23 @@ function ReelsCard({ r }) {
               if (v.paused) v.play();
               else v.pause();
             }}
-            onPlay={() => setPaused(false)}
+            onPlay={(e) => {
+              document
+                .querySelectorAll("[data-reels-video]")
+                .forEach((otherVideo) => {
+                  if (otherVideo !== e.currentTarget) otherVideo.pause();
+                });
+              setPaused(false);
+            }}
             onPause={() => setPaused(true)}
-            className="h-full w-full object-contain"
+            className="h-full w-full object-cover"
           />
         ) : (
           <img
             src={r.media}
             alt=""
             loading="lazy"
-            className="h-full w-full object-contain"
+            className="h-full w-full object-cover"
           />
         )}
         {paused && r.type === "video" && (

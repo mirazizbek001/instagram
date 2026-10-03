@@ -748,6 +748,11 @@ export function AppProvider({ children }) {
     if (skipRemoteSync) skipSocialSyncRef.current += 1;
     return persistDatabase(n);
   };
+  const updateLocalDatabase = (fn) => {
+    const next = structuredClone(dbRef.current);
+    fn(next);
+    return persistDatabase(next);
+  };
   const sendFastAction = async (action) => {
     const token = await ensureCsrfToken();
     const response = await fetch("/plat/social/fast/", {
@@ -777,10 +782,7 @@ export function AppProvider({ children }) {
         const session = await sessionResponse.json().catch(() => ({}));
         if (!active) return;
         if (!session.authenticated) {
-          const existingUser = meId
-            ? dbRef.current.users.find((user) => user.id === meId)
-            : null;
-          if (!existingUser && meId) {
+          if (meId) {
             clearMeId();
             setMeId(null);
             setSocialReadyUser(null);
@@ -789,40 +791,26 @@ export function AppProvider({ children }) {
         }
         if (meId) {
           const sessionUsername = String(session.username || "").trim().toLowerCase();
-          const currentUser = dbRef.current.users.find(
-            (user) =>
-              user.id === meId ||
-              String(user.username || "").trim().toLowerCase() === sessionUsername,
-          );
+          const currentUser = dbRef.current.users.find((user) => user.id === meId);
           if (
             !currentUser ||
             String(currentUser.username || "").trim().toLowerCase() !== sessionUsername
           ) {
-            const fallbackUser = dbRef.current.users.find(
-              (user) =>
-                String(user.username || "").trim().toLowerCase() === sessionUsername,
-            );
-            if (fallbackUser) {
-              storeMeId(fallbackUser.id);
-              setMeId(fallbackUser.id);
-              return;
-            }
-            if (meId) {
-              clearMeId();
-              setMeId(null);
-              setSocialReadyUser(null);
-            }
+            clearMeId();
+            setMeId(null);
+            setSocialReadyUser(null);
             return;
           }
         }
 
         const accountsResponse = await fetch("/plat/users/", {
           credentials: "same-origin",
+          cache: "no-store",
         });
         if (!accountsResponse.ok) throw new Error("Userlarni yuklab bo‘lmadi");
         const accounts = await accountsResponse.json();
         if (!active) return;
-        save((d) => {
+        updateLocalDatabase((d) => {
           const accountNames = new Set(
             accounts.map((account) => account.username),
           );
@@ -850,43 +838,6 @@ export function AppProvider({ children }) {
               });
           });
         });
-        // Django sessioni haqiqiy akkauntning manbai. LocalStorage o‘chib qolgan bo‘lsa ham
-        // sessiondagi akkauntni qayta tiklaymiz — foydalanuvchi qayta login qilmaydi.
-        const sessionAccount =
-          accounts.find((account) => account.username === session.username) ||
-          session;
-        if (sessionAccount) {
-          const localUser = dbRef.current.users.find(
-            (user) => user.username === sessionAccount.username,
-          );
-          const resolvedId = localUser?.id || `server-${sessionAccount.id}`;
-          save((d) => {
-            const existing = d.users.find(
-              (user) => user.username === sessionAccount.username,
-            );
-            if (existing) {
-              existing.name = sessionAccount.name || existing.name;
-              existing.email = sessionAccount.email || existing.email || "";
-              existing.isAdmin = Boolean(session.isAdmin);
-            } else {
-              d.users.push({
-                id: resolvedId,
-                username: sessionAccount.username,
-                email: sessionAccount.email || "",
-                name: sessionAccount.name || sessionAccount.username,
-                bio: "",
-                avatar: null,
-                isAdmin: Boolean(session.isAdmin),
-                t: Date.now(),
-              });
-            }
-          });
-          if (meId !== resolvedId) {
-            storeMeId(resolvedId);
-            setMeId(resolvedId);
-            return;
-          }
-        }
         if (!meId) return;
 
         const stateResponse = await fetch("/plat/social/", {
@@ -895,14 +846,9 @@ export function AppProvider({ children }) {
         const remote = await stateResponse.json().catch(() => ({}));
         if (!stateResponse.ok) {
           if (isAuthenticationFailure(stateResponse, remote)) {
-            const currentUser = dbRef.current.users.find(
-              (user) => user.id === meId,
-            );
-            if (!currentUser) {
-              clearMeId();
-              setMeId(null);
-              setSocialReadyUser(null);
-            }
+            clearMeId();
+            setMeId(null);
+            setSocialReadyUser(null);
             return;
           }
           throw new Error("Ma’lumotlarni yuklab bo‘lmadi");
@@ -1011,7 +957,7 @@ export function AppProvider({ children }) {
             Math.max(cursor, Number(message.t) || 0),
           messageCursorRef.current,
         );
-        save((d) => {
+        updateLocalDatabase((d) => {
           Object.assign(d, restored);
         });
         setSocialReadyUser(meId);
@@ -1057,12 +1003,9 @@ export function AppProvider({ children }) {
           }
         }
         if (isAuthenticationFailure(response, result)) {
-          const currentUser = dbRef.current.users.find((user) => user.id === meId);
-          if (!currentUser && meId) {
-            clearMeId();
-            setMeId(null);
-            setSocialReadyUser(null);
-          }
+          clearMeId();
+          setMeId(null);
+          setSocialReadyUser(null);
           return;
         }
         if (response.status === 403 && result.reason) {
@@ -1324,7 +1267,7 @@ export function AppProvider({ children }) {
         (user) => user.username.toLowerCase() === normalizedUsername,
       );
       const id = existing?.id || `server-${account.id}`;
-      save((d) => {
+      updateLocalDatabase((d) => {
         const user = d.users.find(
           (item) => item.username.toLowerCase() === normalizedUsername,
         );
@@ -1356,7 +1299,7 @@ export function AppProvider({ children }) {
         (user) => user.username.toLowerCase() === normalizedUsername,
       );
       const id = existing?.id || `server-${account.id}`;
-      save((d) => {
+      updateLocalDatabase((d) => {
         const user = d.users.find(
           (item) => item.username.toLowerCase() === normalizedUsername,
         );
@@ -2269,15 +2212,10 @@ export function AppProvider({ children }) {
             if (response.status === 403) {
               const result = await response.json().catch(() => ({}));
               if (isAuthenticationFailure(response, result)) {
-                const currentUser = dbRef.current.users.find(
-                  (user) => user.id === meId,
-                );
-                if (!currentUser) {
-                  clearMeId();
-                  setMeId(null);
-                  setSocialReadyUser(null);
-                  return;
-                }
+                clearMeId();
+                setMeId(null);
+                setSocialReadyUser(null);
+                return;
               }
             }
             delay = Math.min(delay * 2, 15000); // server band/xato — sekinlashamiz
@@ -2328,14 +2266,9 @@ export function AppProvider({ children }) {
           } else if (response.status === 403) {
             const result = await response.json().catch(() => ({}));
             if (isAuthenticationFailure(response, result)) {
-              const currentUser = dbRef.current.users.find(
-                (user) => user.id === meId,
-              );
-              if (!currentUser) {
-                clearMeId();
-                setMeId(null);
-                setSocialReadyUser(null);
-              }
+              clearMeId();
+              setMeId(null);
+              setSocialReadyUser(null);
             }
           }
         }
