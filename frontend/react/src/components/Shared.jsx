@@ -1592,7 +1592,7 @@ function ReelsCard({ r }) {
   return (
     <article className="relative mx-auto flex h-full min-h-[calc(100dvh-56px)] w-full snap-start items-center justify-center px-3 py-3 md:min-h-screen">
       <div
-        className="relative aspect-[9/16] max-h-full w-[min(calc(100vw-24px),calc((100dvh-80px)*9/16))] shrink-0 overflow-hidden rounded-lg bg-black text-white"
+        className="relative aspect-[9/16] max-h-full w-[min(calc(100vw-24px),calc((100dvh-80px)*9/16))] shrink-0 overflow-hidden rounded-lg bg-black text-white md:w-[min(calc(100vw-24px),calc((100dvh-24px)*9/16))]"
         onDoubleClick={dbl}
       >
         {r.type === "video" ? (

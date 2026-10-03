@@ -369,6 +369,7 @@ export function AppProvider({ children }) {
   const [db, setDb] = useState(dbRef.current);
   const [meId, setMeId] = useState(readMeId);
   const me = db.users.find((u) => u.id === meId);
+  const [storageReady, setStorageReady] = useState(false);
   const overflowStorageRef = useRef(false);
   const skipSocialSyncRef = useRef(0);
   const messageCursorRef = useRef(
@@ -674,6 +675,8 @@ export function AppProvider({ children }) {
         setDb(dbRef.current);
       } catch {
         /* Fall back to localStorage when IndexedDB is unavailable. */
+      } finally {
+        if (active) setStorageReady(true);
       }
     };
     const onStorage = (event) => {
@@ -759,6 +762,7 @@ export function AppProvider({ children }) {
     return result;
   };
   useEffect(() => {
+    if (!storageReady) return;
     let active = true;
     const syncFromServer = async () => {
       try {
@@ -891,9 +895,14 @@ export function AppProvider({ children }) {
         const remote = await stateResponse.json().catch(() => ({}));
         if (!stateResponse.ok) {
           if (isAuthenticationFailure(stateResponse, remote)) {
-            clearMeId();
-            setMeId(null);
-            setSocialReadyUser(null);
+            const currentUser = dbRef.current.users.find(
+              (user) => user.id === meId,
+            );
+            if (!currentUser) {
+              clearMeId();
+              setMeId(null);
+              setSocialReadyUser(null);
+            }
             return;
           }
           throw new Error("Ma’lumotlarni yuklab bo‘lmadi");
@@ -1014,7 +1023,7 @@ export function AppProvider({ children }) {
     return () => {
       active = false;
     };
-  }, [meId]);
+  }, [meId, storageReady]);
   const byId = (id) => db.users.find((u) => u.id === id);
   useEffect(() => {
     if (!me || socialReadyUser !== meId) return;
@@ -2260,10 +2269,15 @@ export function AppProvider({ children }) {
             if (response.status === 403) {
               const result = await response.json().catch(() => ({}));
               if (isAuthenticationFailure(response, result)) {
-                clearMeId();
-                setMeId(null);
-                setSocialReadyUser(null);
-                return;
+                const currentUser = dbRef.current.users.find(
+                  (user) => user.id === meId,
+                );
+                if (!currentUser) {
+                  clearMeId();
+                  setMeId(null);
+                  setSocialReadyUser(null);
+                  return;
+                }
               }
             }
             delay = Math.min(delay * 2, 15000); // server band/xato — sekinlashamiz
@@ -2314,9 +2328,14 @@ export function AppProvider({ children }) {
           } else if (response.status === 403) {
             const result = await response.json().catch(() => ({}));
             if (isAuthenticationFailure(response, result)) {
-              clearMeId();
-              setMeId(null);
-              setSocialReadyUser(null);
+              const currentUser = dbRef.current.users.find(
+                (user) => user.id === meId,
+              );
+              if (!currentUser) {
+                clearMeId();
+                setMeId(null);
+                setSocialReadyUser(null);
+              }
             }
           }
         }

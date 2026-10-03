@@ -93,7 +93,13 @@ function AppShell() {
     navigator.serviceWorker.getRegistration().then((registration) => {
       if (registration?.waiting && navigator.serviceWorker.controller)
         showUpdate();
-    });
+    }).catch(() => {});
+    navigator.serviceWorker.ready
+      .then((registration) => {
+        if (registration.waiting && navigator.serviceWorker.controller)
+          showUpdate();
+      })
+      .catch(() => {});
     return () =>
       window.removeEventListener("instakids-update-ready", showUpdate);
   }, []);

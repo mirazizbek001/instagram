@@ -87,7 +87,7 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
         registration = value;
         observeRegistration(registration);
         void checkForUpdate();
-        setInterval(() => void checkForUpdate(), 15 * 60 * 1000);
+        setInterval(() => void checkForUpdate(), 60 * 1000);
         document.addEventListener("visibilitychange", () => {
           if (!document.hidden) void checkForUpdate();
         });
