@@ -18,6 +18,23 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_UPLOAD_MAX_MEMORY_SIZE = 40 * 1024 * 1024
 
 
+def _volume_mount_path():
+    configured_path = os.getenv('RAILWAY_VOLUME_MOUNT_PATH', '').strip()
+    if configured_path:
+        return Path(configured_path)
+    railway_environment = (
+        os.getenv('RAILWAY_ENVIRONMENT', '').strip()
+        or os.getenv('RAILWAY_ENVIRONMENT_NAME', '').strip()
+    )
+    default_path = Path('/data')
+    if railway_environment and default_path.is_dir() and os.access(default_path, os.W_OK):
+        return default_path
+    return None
+
+
+VOLUME_MOUNT_PATH = _volume_mount_path()
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
@@ -136,8 +153,7 @@ def _database():
             'CONN_MAX_AGE': 60,
             'CONN_HEALTH_CHECKS': True,
         }
-    volume = os.getenv('RAILWAY_VOLUME_MOUNT_PATH', '').strip()
-    path = Path(volume) / 'db.sqlite3' if volume else BASE_DIR / 'db.sqlite3'
+    path = VOLUME_MOUNT_PATH / 'db.sqlite3' if VOLUME_MOUNT_PATH else BASE_DIR / 'db.sqlite3'
     return {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': path,
@@ -196,11 +212,10 @@ GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '').strip()
 
 
 MEDIA_URL = '/media/'
-_volume = os.getenv('RAILWAY_VOLUME_MOUNT_PATH', '').strip()
-MEDIA_ROOT = (Path(_volume) / 'media') if _volume else (BASE_DIR / 'media')
+MEDIA_ROOT = (VOLUME_MOUNT_PATH / 'media') if VOLUME_MOUNT_PATH else (BASE_DIR / 'media')
 
 # Ma'lumot deploydan keyin saqlanib qoladimi? (Postgres yoki Volume bo'lsa — ha)
-DATA_PERSISTENT = bool(os.getenv('DATABASE_URL', '').strip() or _volume)
+DATA_PERSISTENT = bool(os.getenv('DATABASE_URL', '').strip() or VOLUME_MOUNT_PATH)
 if not DATA_PERSISTENT and not DEBUG:
     import logging
     logging.getLogger('django').warning(
@@ -220,4 +235,3 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
-

@@ -252,7 +252,6 @@ export function PwaInstallButton({ compact = false, iconOnly = false }) {
     const onInstallPromptAvailable = () => {
       const nextPrompt = window.__instakidsInstallPrompt || null;
       setInstallPrompt(nextPrompt);
-      if (!installed && nextPrompt) setShowHelp(true);
     };
     const onInstalled = () => {
       window.__instakidsInstallPrompt = null;

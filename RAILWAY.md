@@ -40,7 +40,18 @@ Javobda:
 
 bo‘lishi kerak.
 
-## 4. Muhim
+## 4. Admin akkaunt yaratish
+
+Railway deploy qilingan service Console’da:
+
+```sh
+python manage.py migrate
+python manage.py createsuperuser
+```
+
+Console ham `/data` Volume’ni avtomatik aniqlaydi, shuning uchun admin akkaunt server ishlatayotgan bazada yaratiladi.
+
+## 5. Muhim
 
 - `BACKEND_URL` kerak emas.
 - Frontend va backend bir xil domen orqali ishlaydi.
