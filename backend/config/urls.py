@@ -21,7 +21,7 @@ def health(request):
 urlpatterns = [
     path('', health, name='root-health'),
     path('health/', health, name='health'),
-    path('admin/', admin.site.urls),
+    path('django-admin/', admin.site.urls),
     path('plat/', include('plat.urls')),
     # Yuklangan fayllar (Volume ichidagi media papka)
     re_path(r'^media/(?P<path>.*)$', media_serve, {'document_root': settings.MEDIA_ROOT}, name='media'),

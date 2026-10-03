@@ -45,11 +45,14 @@ bo‘lishi kerak.
 Railway deploy qilingan service Console’da:
 
 ```sh
+python manage.py shell -c "from django.conf import settings; print(settings.DATABASES['default']['NAME'])"
 python manage.py migrate
 python manage.py createsuperuser
 ```
 
-Console `/data` Volume’ni, Volume ulanmagan bo‘lsa serverning vaqtinchalik SQLite yo‘lini avtomatik aniqlaydi. `DATABASE_URL` yoki `/data` Volume sozlanmaganida ma’lumotlar deploy/restartda yo‘qolishi mumkinligi haqidagi ogohlantirish qoladi; bu buyruq xatosi emas.
+Ko‘rsatilgan database yo‘li Railway app ishlatayotgan baza bilan bir xil bo‘lishi kerak. `DATABASE_URL` yoki `/data` Volume sozlanmaganida ma’lumotlar deploy/restartda yo‘qolishi mumkinligi haqidagi ogohlantirish qoladi; bu buyruq xatosi emas.
+
+Ilova ichidagi boshqaruv paneli `/admin` manzilida, Django’ning texnik admin paneli esa `/django-admin/` manzilida ochiladi.
 
 ## 5. Muhim
 
