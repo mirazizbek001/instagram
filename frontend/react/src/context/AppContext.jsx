@@ -781,10 +781,16 @@ export function AppProvider({ children }) {
           return;
         }
         if (meId) {
+          const sessionUsername = String(session.username || "").trim().toLowerCase();
           const currentUser = dbRef.current.users.find(
-            (user) => user.id === meId || user.username === session.username,
+            (user) =>
+              user.id === meId ||
+              String(user.username || "").trim().toLowerCase() === sessionUsername,
           );
-          if (!currentUser || currentUser.username !== session.username) {
+          if (
+            !currentUser ||
+            String(currentUser.username || "").trim().toLowerCase() !== sessionUsername
+          ) {
             clearMeId();
             setMeId(null);
             setSocialReadyUser(null);
@@ -1273,23 +1279,32 @@ export function AppProvider({ children }) {
   const A = {
     toast: say,
     validateRegister: ({ username, email, name, password }) => {
+      const normalizedUsername = String(username || "").trim().toLowerCase();
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
         return "To‘g‘ri email manzil kiriting";
-      if (username.length < 3) return "Username kamida 3 ta belgi";
+      if (normalizedUsername.length < 3) return "Username kamida 3 ta belgi";
       if (!name.trim()) return "Ismingizni kiriting";
       if (password.length < 4) return "Parol kamida 4 ta belgi";
-      if (dbRef.current.users.some((u) => u.username === username))
+      if (
+        dbRef.current.users.some(
+          (u) => u.username.toLowerCase() === normalizedUsername,
+        )
+      )
         return "Bu username band";
     },
     register: ({ username, email, name }, account) => {
+      const normalizedUsername = String(username || "").trim().toLowerCase();
       const existing = dbRef.current.users.find(
-        (user) => user.username === username,
+        (user) => user.username.toLowerCase() === normalizedUsername,
       );
       const id = existing?.id || `server-${account.id}`;
       save((d) => {
-        const user = d.users.find((item) => item.username === username);
+        const user = d.users.find(
+          (item) => item.username.toLowerCase() === normalizedUsername,
+        );
         if (user)
           Object.assign(user, {
+            username: normalizedUsername,
             name: name.trim(),
             email: email.trim(),
             isAdmin: Boolean(account.isAdmin),
@@ -1297,7 +1312,7 @@ export function AppProvider({ children }) {
         else
           d.users.push({
             id,
-            username,
+            username: normalizedUsername,
             email: email.trim(),
             name: name.trim(),
             bio: "",
@@ -1310,20 +1325,24 @@ export function AppProvider({ children }) {
       setMeId(id);
     },
     login: ({ username }, account) => {
+      const normalizedUsername = String(username || "").trim().toLowerCase();
       const existing = dbRef.current.users.find(
-        (user) => user.username === username,
+        (user) => user.username.toLowerCase() === normalizedUsername,
       );
       const id = existing?.id || `server-${account.id}`;
       save((d) => {
-        const user = d.users.find((item) => item.username === username);
+        const user = d.users.find(
+          (item) => item.username.toLowerCase() === normalizedUsername,
+        );
         if (user) {
           user.name = account.name || user.name;
           user.email = account.email || user.email || "";
+          user.username = normalizedUsername;
           user.isAdmin = Boolean(account.isAdmin);
         } else
           d.users.push({
             id,
-            username,
+            username: normalizedUsername,
             email: account.email || "",
             name: account.name,
             bio: "",
