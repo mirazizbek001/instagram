@@ -773,7 +773,10 @@ export function AppProvider({ children }) {
         const session = await sessionResponse.json().catch(() => ({}));
         if (!active) return;
         if (!session.authenticated) {
-          if (meId) {
+          const existingUser = meId
+            ? dbRef.current.users.find((user) => user.id === meId)
+            : null;
+          if (!existingUser && meId) {
             clearMeId();
             setMeId(null);
             setSocialReadyUser(null);
@@ -791,9 +794,20 @@ export function AppProvider({ children }) {
             !currentUser ||
             String(currentUser.username || "").trim().toLowerCase() !== sessionUsername
           ) {
-            clearMeId();
-            setMeId(null);
-            setSocialReadyUser(null);
+            const fallbackUser = dbRef.current.users.find(
+              (user) =>
+                String(user.username || "").trim().toLowerCase() === sessionUsername,
+            );
+            if (fallbackUser) {
+              storeMeId(fallbackUser.id);
+              setMeId(fallbackUser.id);
+              return;
+            }
+            if (meId) {
+              clearMeId();
+              setMeId(null);
+              setSocialReadyUser(null);
+            }
             return;
           }
         }
@@ -1034,9 +1048,12 @@ export function AppProvider({ children }) {
           }
         }
         if (isAuthenticationFailure(response, result)) {
-          clearMeId();
-          setMeId(null);
-          setSocialReadyUser(null);
+          const currentUser = dbRef.current.users.find((user) => user.id === meId);
+          if (!currentUser && meId) {
+            clearMeId();
+            setMeId(null);
+            setSocialReadyUser(null);
+          }
           return;
         }
         if (response.status === 403 && result.reason) {
