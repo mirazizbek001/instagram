@@ -1383,7 +1383,7 @@ function useReelMuted() {
   };
   return [muted, set];
 }
-function useVideoAutoplay(ref, muted, setMuted, threshold, key) {
+function useVideoAutoplay(ref, muted, setMuted, threshold, key, autoPlay = true) {
   useEffect(() => {
     if (ref.current) ref.current.muted = muted;
   }, [muted]);
@@ -1392,7 +1392,7 @@ function useVideoAutoplay(ref, muted, setMuted, threshold, key) {
     if (!v) return;
     const io = new IntersectionObserver(
       ([e]) => {
-        if (e.isIntersecting && e.intersectionRatio >= threshold)
+        if (autoPlay && e.isIntersecting && e.intersectionRatio >= threshold)
           v.play().catch(() => {
             v.muted = true;
             setMuted(true);
@@ -1407,7 +1407,7 @@ function useVideoAutoplay(ref, muted, setMuted, threshold, key) {
       io.disconnect();
       v.pause();
     };
-  }, [key]);
+  }, [key, autoPlay]);
 }
 function Caption({ u, text }) {
   const [more, setMore] = useState(false);
@@ -1576,7 +1576,7 @@ function ReelsCard({ r }) {
   const saved = (db.saved[me.id] || []).includes(r.id);
   const video = useRef(null);
   const bar = useRef(null);
-  useVideoAutoplay(video, muted, setMuted, 0.65, r.id);
+  useVideoAutoplay(video, muted, setMuted, 0.65, r.id, false);
   if (!u) return null;
   const dbl = () => {
     if (!liked) A.like(r.id, "reel");
@@ -1592,7 +1592,7 @@ function ReelsCard({ r }) {
   return (
     <article className="relative mx-auto flex h-full min-h-[calc(100dvh-56px)] w-full snap-start items-center justify-center px-3 py-3 md:min-h-screen">
       <div
-        className="relative aspect-[9/16] max-h-full w-[min(calc(100vw-24px),calc((100dvh-80px)*9/16))] shrink-0 overflow-hidden rounded-lg bg-black text-white md:w-[min(calc(100vw-24px),calc((100dvh-24px)*9/16))]"
+        className="relative aspect-[9/16] max-h-[calc(100dvh-80px)] w-[min(calc(100vw-24px),calc((100dvh-80px)*9/16))] shrink-0 overflow-hidden rounded-lg bg-black text-white md:max-h-[calc(100dvh-24px)] md:w-[min(calc(100vw-24px),calc((100dvh-24px)*9/16))]"
         onDoubleClick={dbl}
       >
         {r.type === "video" ? (
