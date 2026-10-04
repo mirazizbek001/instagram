@@ -371,6 +371,12 @@ html.dark .profile-page button:hover {
   .profile-page>.mt-5.flex {
     overflow-x: auto;
     justify-content: flex-start;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .profile-page>.mt-5.flex::-webkit-scrollbar {
+    display: none;
   }
 
   .profile-page>.mt-5.flex>button {

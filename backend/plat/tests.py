@@ -1,7 +1,8 @@
 import base64
 from datetime import datetime, time, timedelta
+from unittest.mock import patch
 from django.conf import settings
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
@@ -171,6 +172,23 @@ class RegistrationTests(APITestCase):
 			'name': 'Admin',
 			'password': 'secret123',
 		}, format='json')
+
+		self.assertEqual(response.status_code, 403)
+		self.assertFalse(User.objects.filter(username='admin').exists())
+
+	@override_settings(GOOGLE_CLIENT_ID='test-google-client-id')
+	@patch('plat.views._verify_google_token')
+	def test_google_login_rejects_admin_email_username(self, mock_verify_google_token):
+		mock_verify_google_token.return_value = {
+			'aud': 'test-google-client-id',
+			'iss': 'accounts.google.com',
+			'email_verified': 'true',
+			'email': 'Admin@Example.com',
+			'name': 'Admin',
+			'exp': int(timezone.now().timestamp()) + 300,
+		}
+
+		response = self.client.post('/plat/google/', {'credential': 'demo-token'}, format='json')
 
 		self.assertEqual(response.status_code, 403)
 		self.assertFalse(User.objects.filter(username='admin').exists())

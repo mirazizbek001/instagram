@@ -1142,7 +1142,10 @@ def google_login(request):
 	if not user:
 		if not is_service_open():
 			return _closed_response('hours')
-		user = User.objects.create_user(username=_unique_username(email, name), email=email, first_name=name[:150])
+		candidate = _unique_username(email, name)
+		if candidate.lower() == 'admin':
+			return Response({'error': 'Admin akkauntini faqat server administratori yaratishi mumkin.'}, status=status.HTTP_403_FORBIDDEN)
+		user = User.objects.create_user(username=candidate, email=email, first_name=name[:150])
 		user.set_unusable_password()
 		user.save()
 		created = True
