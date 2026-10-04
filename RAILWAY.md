@@ -8,7 +8,7 @@ Bu versiya frontend va backendni **bitta Railway service** ichida ishlatadi. `/p
 2. Root Directory'ni o‘zgartirmang.
 3. Root'dagi `Dockerfile` avtomatik ishlatiladi.
 4. Railway → Settings → Volumes → Add Volume.
-5. Mount path: `/data`.
+5. Mount path: `/data`. Boshqa path ishlatilsa, `RAILWAY_VOLUME_MOUNT_PATH` qiymatini o‘sha path bilan bir xil belgilang.
 
 Production’da `/data` Volume yoki PostgreSQL `DATABASE_URL` shart. Ikkalasi ham bo‘lmasa, app vaqtinchalik bazada foydalanuvchi ma’lumotlarini yo‘qotmaslik uchun ishga tushmaydi. Oldingi deploylarda yo‘qolgan ma’lumotlarni bu o‘zgarish tiklay olmaydi; ularni faqat mavjud backup yoki eski persistent bazadan qaytarish mumkin.
 

@@ -7,16 +7,17 @@ set -eu
 # If DATABASE_URL is supplied, Django uses PostgreSQL instead.
 # If neither is available, keep the app bootable by falling back to writable local storage.
 if [ -z "${DATABASE_URL:-}" ]; then
-  if [ -d /data ] && [ -w /data ]; then
-    export RAILWAY_VOLUME_MOUNT_PATH=/data
-    mkdir -p /data/media
-    if [ ! -f /data/db.sqlite3 ] && [ -f /app/db.sqlite3 ]; then
-      echo "[InstaKids] First run: copying initial SQLite database to /data"
-      cp /app/db.sqlite3 /data/db.sqlite3
+  VOLUME_PATH="${RAILWAY_VOLUME_MOUNT_PATH:-/data}"
+  if [ -d "$VOLUME_PATH" ] && [ -w "$VOLUME_PATH" ]; then
+    export RAILWAY_VOLUME_MOUNT_PATH="$VOLUME_PATH"
+    mkdir -p "$VOLUME_PATH/media"
+    if [ ! -f "$VOLUME_PATH/db.sqlite3" ] && [ -f /app/db.sqlite3 ]; then
+      echo "[InstaKids] First run: copying initial SQLite database to $VOLUME_PATH"
+      cp /app/db.sqlite3 "$VOLUME_PATH/db.sqlite3"
     fi
   else
     if [ "${DEBUG:-0}" != "1" ] && [ "${ALLOW_EPHEMERAL_DATA:-0}" != "1" ]; then
-      echo "[InstaKids] ERROR: production requires a Railway Volume mounted at /data or DATABASE_URL. Refusing to start with an ephemeral database." >&2
+      echo "[InstaKids] ERROR: production requires a writable Railway Volume mounted at '$VOLUME_PATH' or DATABASE_URL. Refusing to start with an ephemeral database." >&2
       exit 1
     fi
     export INSTA_KIDS_DATA_PATH=/tmp/instakids-data
