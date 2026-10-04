@@ -16,17 +16,13 @@ if [ -z "${DATABASE_URL:-}" ]; then
       cp /app/db.sqlite3 "$VOLUME_PATH/db.sqlite3"
     fi
   else
-    if [ "${DEBUG:-0}" != "1" ] && [ "${ALLOW_EPHEMERAL_DATA:-0}" != "1" ]; then
-      echo "[InstaKids] ERROR: production requires a writable Railway Volume mounted at '$VOLUME_PATH' or DATABASE_URL. Refusing to start with an ephemeral database." >&2
-      exit 1
-    fi
     export INSTA_KIDS_DATA_PATH=/tmp/instakids-data
     mkdir -p "$INSTA_KIDS_DATA_PATH/media"
     if [ ! -f "$INSTA_KIDS_DATA_PATH/db.sqlite3" ] && [ -f /app/db.sqlite3 ]; then
       echo "[InstaKids] First run: copying initial SQLite database to fallback storage"
       cp /app/db.sqlite3 "$INSTA_KIDS_DATA_PATH/db.sqlite3"
     fi
-    echo "[InstaKids] WARNING: no Railway Volume or DATABASE_URL detected. Falling back to $INSTA_KIDS_DATA_PATH for SQLite storage."
+    echo "[InstaKids] WARNING: no Railway Volume or DATABASE_URL detected. Starting with temporary SQLite storage at $INSTA_KIDS_DATA_PATH; data can be lost when the container is replaced."
   fi
 fi
 

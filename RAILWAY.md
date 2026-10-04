@@ -7,10 +7,9 @@ Bu versiya frontend va backendni **bitta Railway service** ichida ishlatadi. `/p
 1. GitHub repo root'ini Railway'ga ulang.
 2. Root Directory'ni o‘zgartirmang.
 3. Root'dagi `Dockerfile` avtomatik ishlatiladi.
-4. Railway → Settings → Volumes → Add Volume.
-5. Mount path: `/data`. Boshqa path ishlatilsa, `RAILWAY_VOLUME_MOUNT_PATH` qiymatini o‘sha path bilan bir xil belgilang.
+4. Doimiy ma’lumotlar uchun Railway Volume qo‘shib, mount path’ni `/data` qiling. Bu imkoniyat bo‘lmasa, service vaqtinchalik SQLite bazasi bilan ham ishga tushadi.
 
-Production’da `/data` Volume yoki PostgreSQL `DATABASE_URL` shart. Ikkalasi ham bo‘lmasa, app vaqtinchalik bazada foydalanuvchi ma’lumotlarini yo‘qotmaslik uchun ishga tushmaydi. Oldingi deploylarda yo‘qolgan ma’lumotlarni bu o‘zgarish tiklay olmaydi; ularni faqat mavjud backup yoki eski persistent bazadan qaytarish mumkin.
+Volume yoki PostgreSQL `DATABASE_URL` bo‘lmasa, ilova `/tmp/instakids-data` dagi vaqtinchalik bazadan foydalanadi. Akkauntlar, xabarlar va media deploy yoki container almashtirilganda yo‘qolishi mumkin. Doimiy saqlash uchun Volume yoki PostgreSQL tavsiya qilinadi. Oldingi deploylarda yo‘qolgan ma’lumotlarni bu o‘zgarish tiklay olmaydi; ularni faqat mavjud backup yoki eski persistent bazadan qaytarish mumkin.
 
 ## 2. Variables
 
@@ -26,7 +25,7 @@ DATABASE_URL=${{Postgres.DATABASE_URL}}
 GOOGLE_CLIENT_ID=<Google OAuth client id>
 ```
 
-`DATABASE_URL` bo‘lsa PostgreSQL ishlatiladi. Bo‘lmasa `/data/db.sqlite3` ishlatiladi.
+`DATABASE_URL` bo‘lsa PostgreSQL ishlatiladi. Volume `/data` ga ulangan bo‘lsa `/data/db.sqlite3`, aks holda `/tmp/instakids-data/db.sqlite3` ishlatiladi.
 
 ## 3. Health check
 
@@ -37,7 +36,7 @@ https://SIZNING-DOMENINGIZ/health
 Javobda:
 
 ```json
-{"status":"ok","database":"sqlite3","data_persistent":true}
+{"status":"ok","database":"sqlite3","data_persistent":false}
 ```
 
 bo‘lishi kerak.
@@ -65,4 +64,4 @@ Ilova ichidagi boshqaruv paneli `/admin` manzilida, Django’ning texnik admin p
 - Yozishmalar `SocialState` orqali server database'ida saqlanadi.
 - Railway Volume `/data` akkauntlar, sessionlar, yozishmalar va media uchun persistent storage beradi.
 - PostgreSQL ishlatilsa web service uchun SQLite Volume shart emas; media uchun Volume yoki object storage kerak.
-- `DATABASE_URL` ham, `/data` Volume ham bo‘lmasa, production app ishga tushmaydi. Bu yangi akkauntlar va sessiyalarning keyingi deployda yo‘qolishining oldini oladi.
+- `DATABASE_URL` ham, `/data` Volume ham bo‘lmasa, app vaqtinchalik SQLite bazasida ishga tushadi; ma’lumotlar deploy/container almashtirilganda yo‘qolishi mumkin.

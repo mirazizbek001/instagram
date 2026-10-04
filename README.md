@@ -16,6 +16,6 @@ This repository root is the **whole project**. Deploy this root with Railway's D
 4. Set `SECRET_KEY` to a long random value.
 5. Open `/health` after deployment.
 
-In production, the app refuses to start unless a Railway Volume is mounted at `/data` or `DATABASE_URL` points to PostgreSQL. This prevents accounts and sessions from silently disappearing after a deployment. For local testing only, set `DEBUG=1` or explicitly opt into ephemeral storage with `ALLOW_EPHEMERAL_DATA=1`.
+For persistent production data, mount a Railway Volume at `/data` or set `DATABASE_URL` to PostgreSQL. Without either, the app starts with temporary SQLite storage under `/tmp/instakids-data`; accounts, sessions, messages, and media can be lost when Railway replaces the container.
 
 Do not commit `backend/db.sqlite3`; production data belongs in the Railway Volume or PostgreSQL.
