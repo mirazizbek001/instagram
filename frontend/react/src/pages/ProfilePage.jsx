@@ -11,7 +11,6 @@ import {
   Moon,
   MoreHorizontal,
   Pencil,
-  Phone,
   PlusSquare,
   Search,
   Send,
@@ -277,15 +276,6 @@ function Profile({ id, goChat }) {
             className="h-11 flex-1 rounded-lg bg-neutral-200 px-4 text-sm font-semibold dark:bg-[#17223b]"
           >
             Xabar
-          </button>
-          <button
-            onClick={() => A.startCall(u.id, "audio")}
-            disabled={connectionHidden}
-            aria-label="Audio qo‘ng‘iroq"
-            title="Audio qo‘ng‘iroq"
-            className="h-11 w-11 rounded-lg bg-emerald-500/10 px-2 text-emerald-600 transition hover:bg-emerald-500/15 disabled:opacity-40 dark:text-emerald-400"
-          >
-            <Phone size={18} className="mx-auto" />
           </button>
           <button
             onClick={() => A.startCall(u.id, "video")}

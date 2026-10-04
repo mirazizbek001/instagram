@@ -243,7 +243,7 @@ html.dark .reels-page {
 }
 
 .profile-page .story-ring {
-  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #d946ef;
+  box-shadow: 0 0 0 2px #d946ef;
 }
 
 .profile-page .bg-black {
@@ -289,10 +289,6 @@ html.dark .profile-page .dark\:bg-\[\#17191c\] {
 
 html.dark .profile-page button:hover {
   background-color: transparent;
-}
-
-html.dark .profile-page .story-ring {
-  box-shadow: 0 0 0 2px #0b1224, 0 0 0 4px #d946ef;
 }
 
 @media (max-width: 767px) {
