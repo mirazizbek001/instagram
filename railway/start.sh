@@ -15,6 +15,10 @@ if [ -z "${DATABASE_URL:-}" ]; then
       cp /app/db.sqlite3 /data/db.sqlite3
     fi
   else
+    if [ "${DEBUG:-0}" != "1" ] && [ "${ALLOW_EPHEMERAL_DATA:-0}" != "1" ]; then
+      echo "[InstaKids] ERROR: production requires a Railway Volume mounted at /data or DATABASE_URL. Refusing to start with an ephemeral database." >&2
+      exit 1
+    fi
     export INSTA_KIDS_DATA_PATH=/tmp/instakids-data
     mkdir -p "$INSTA_KIDS_DATA_PATH/media"
     if [ ! -f "$INSTA_KIDS_DATA_PATH/db.sqlite3" ] && [ -f /app/db.sqlite3 ]; then

@@ -16,6 +16,6 @@ This repository root is the **whole project**. Deploy this root with Railway's D
 4. Set `SECRET_KEY` to a long random value.
 5. Open `/health` after deployment.
 
-If neither `/data` nor `DATABASE_URL` is configured, the app still starts with a local fallback SQLite directory so the service stays online, but the data is not durable across restarts. For durable production data, use a Volume or PostgreSQL.
+In production, the app refuses to start unless a Railway Volume is mounted at `/data` or `DATABASE_URL` points to PostgreSQL. This prevents accounts and sessions from silently disappearing after a deployment. For local testing only, set `DEBUG=1` or explicitly opt into ephemeral storage with `ALLOW_EPHEMERAL_DATA=1`.
 
 Do not commit `backend/db.sqlite3`; production data belongs in the Railway Volume or PostgreSQL.

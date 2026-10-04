@@ -10,6 +10,8 @@ Bu versiya frontend va backendni **bitta Railway service** ichida ishlatadi. `/p
 4. Railway → Settings → Volumes → Add Volume.
 5. Mount path: `/data`.
 
+Production’da `/data` Volume yoki PostgreSQL `DATABASE_URL` shart. Ikkalasi ham bo‘lmasa, app vaqtinchalik bazada foydalanuvchi ma’lumotlarini yo‘qotmaslik uchun ishga tushmaydi. Oldingi deploylarda yo‘qolgan ma’lumotlarni bu o‘zgarish tiklay olmaydi; ularni faqat mavjud backup yoki eski persistent bazadan qaytarish mumkin.
+
 ## 2. Variables
 
 ```text
@@ -63,4 +65,4 @@ Ilova ichidagi boshqaruv paneli `/admin` manzilida, Django’ning texnik admin p
 - Yozishmalar `SocialState` orqali server database'ida saqlanadi.
 - Railway Volume `/data` akkauntlar, sessionlar, yozishmalar va media uchun persistent storage beradi.
 - PostgreSQL ishlatilsa web service uchun SQLite Volume shart emas; media uchun Volume yoki object storage kerak.
-- `DATABASE_URL` ham, `/data` Volume ham bo‘lmasa, app ishga tushadi, lekin SQLite ma’lumotlari qayta ishga tushganda yo‘qolishi mumkin. Barqaror production ma’lumotlari uchun Volume yoki PostgreSQL kerak.
+- `DATABASE_URL` ham, `/data` Volume ham bo‘lmasa, production app ishga tushmaydi. Bu yangi akkauntlar va sessiyalarning keyingi deployda yo‘qolishining oldini oladi.
