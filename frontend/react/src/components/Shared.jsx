@@ -397,27 +397,43 @@ function Auth({ A, accessInfo }) {
   });
   const [err, setErr] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const postJson = async (url, body) => {
-    const send = (token) =>
-      fetch(url, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": token },
-        body: JSON.stringify(body),
-      });
-    let response = await send(await ensureCsrfToken());
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const postJson = async (url, body, token) => {
+    const send = async (csrf) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 20000);
+      try {
+        return await fetch(url, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (error.name === "AbortError")
+          throw new Error(
+            "Server javobi kechikyapti. Birozdan keyin qayta urinib ko‘ring.",
+            { cause: error },
+          );
+        throw error;
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+    let response = await send(token);
     if (response.status === 403) {
-      const result = await response
-        .clone()
-        .json()
-        .catch(() => ({}));
-      if (/csrf failed/i.test(result.detail || ""))
-        response = await send(await ensureCsrfToken(true));
+      const result = await response.clone().json().catch(() => ({}));
+      if (/csrf failed/i.test(result.detail || "")) {
+        const freshToken = await ensureCsrfToken(true, 18000);
+        response = await send(freshToken);
+      }
     }
     return response;
   };
   const go = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setErr("");
     if (reg && accessInfo?.open === false) {
       setErr(
@@ -425,16 +441,18 @@ function Auth({ A, accessInfo }) {
       );
       return;
     }
-    const token = await ensureCsrfToken();
-    if (!token) {
-      setErr(
-        "Server hozir javob bermayapti (ishga tushayotgan bo‘lishi mumkin). Bir necha soniyadan keyin qayta bosing.",
-      );
-      return;
+    if (reg) {
+      const validationError = A.validateRegister(f);
+      if (validationError) {
+        setErr(validationError);
+        return;
+      }
     }
+    setIsSubmitting(true);
     if (!reg) {
       try {
-        const response = await postJson("/plat/login/", f);
+        const token = await ensureCsrfToken(false, 18000);
+        const response = await postJson("/plat/login/", f, token);
         const result = await response.json().catch(() => ({}));
         if (!response.ok) {
           setErr(
@@ -446,20 +464,16 @@ function Auth({ A, accessInfo }) {
         }
         rememberUsername(String(f.username || "").trim().toLowerCase());
         A.login(f, result);
-      } catch {
-        setErr(
-          "Server bilan bog‘lanib bo‘lmadi. Backend ishga tushganini tekshiring.",
-        );
+      } catch (error) {
+        setErr(error.message || "Server bilan bog‘lanib bo‘lmadi.");
+      } finally {
+        setIsSubmitting(false);
       }
       return;
     }
-    const validationError = A.validateRegister(f);
-    if (validationError) {
-      setErr(validationError);
-      return;
-    }
     try {
-      const response = await postJson("/plat/register/", f);
+      const token = await ensureCsrfToken(false, 18000);
+      const response = await postJson("/plat/register/", f, token);
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
         setErr(
@@ -471,21 +485,27 @@ function Auth({ A, accessInfo }) {
       }
       rememberUsername(String(f.username || "").trim().toLowerCase());
       A.register(f, result);
-    } catch {
-      setErr(
-        "Server bilan bog‘lanib bo‘lmadi. Backend ishga tushganini tekshiring.",
-      );
+    } catch (error) {
+      setErr(error.message || "Server bilan bog‘lanib bo‘lmadi.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
   const googleGo = async (credential) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     setErr("");
-    const token = await ensureCsrfToken();
+    let timer;
     try {
+      const token = await ensureCsrfToken(false, 18000);
+      const controller = new AbortController();
+      timer = setTimeout(() => controller.abort(), 20000);
       const response = await fetch("/plat/google/", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json", "X-CSRFToken": token },
         body: JSON.stringify({ credential }),
+        signal: controller.signal,
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -498,10 +518,15 @@ function Auth({ A, accessInfo }) {
       }
       rememberUsername(String(result.username || "").trim().toLowerCase());
       A.login({ username: result.username }, result);
-    } catch {
+    } catch (error) {
       setErr(
-        "Server bilan bog‘lanib bo‘lmadi. Birozdan keyin qayta urinib ko‘ring.",
+        error.name === "AbortError"
+          ? "Server javobi kechikyapti. Birozdan keyin qayta urinib ko‘ring."
+          : error.message || "Server bilan bog‘lanib bo‘lmadi.",
       );
+    } finally {
+      clearTimeout(timer);
+      setIsSubmitting(false);
     }
   };
   const inp =
@@ -591,8 +616,15 @@ function Auth({ A, accessInfo }) {
               </button>
             </div>
           </div>
-          <button className="mt-4 w-full rounded-lg bg-black dark:bg-white dark:text-black py-2 text-sm font-semibold text-white hover:bg-neutral-800 dark:hover:bg-neutral-200">
-            {reg ? "Ro‘yxatdan o‘tish" : "Kirish"}
+          <button
+            disabled={isSubmitting}
+            className="mt-4 w-full rounded-lg bg-black py-2 text-sm font-semibold text-white hover:bg-neutral-800 disabled:cursor-wait disabled:opacity-60 dark:bg-white dark:text-black dark:hover:bg-neutral-200"
+          >
+            {isSubmitting
+              ? "Kutilmoqda..."
+              : reg
+                ? "Ro‘yxatdan o‘tish"
+                : "Kirish"}
           </button>
           <GoogleSignIn onCredential={googleGo} onError={setErr} />
           {err && (
@@ -603,11 +635,12 @@ function Auth({ A, accessInfo }) {
         <div className="mt-3 rounded-2xl border border-neutral-200 bg-white/90 p-4 text-center text-sm shadow-sm dark:border-[#263756] dark:bg-[#101a30]">
           {reg ? "Akkauntingiz bormi?" : "Akkauntingiz yo‘qmi?"}{" "}
           <button
+            disabled={isSubmitting}
             onClick={() => {
               setReg(!reg);
               setErr("");
             }}
-            className="font-semibold text-black dark:text-white"
+            className="font-semibold text-black disabled:opacity-50 dark:text-white"
           >
             {reg ? "Kirish" : "Ro‘yxatdan o‘tish"}
           </button>

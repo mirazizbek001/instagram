@@ -123,7 +123,7 @@ const csrfToken = () =>
       ?.split("=")[1] || "",
   );
 let _csrfMemo = "";
-const ensureCsrfToken = async (force = false) => {
+const ensureCsrfToken = async (force = false, timeoutMs = Infinity) => {
   // Backend uyg'onayotgan / qayta ishga tushayotgan bo'lsa ham, bir necha marta urinib ko'radi
   if (!force) {
     const cookieToken = csrfToken();
@@ -133,17 +133,28 @@ const ensureCsrfToken = async (force = false) => {
     }
   }
   const delays = [0, 800, 1800, 3500, 6000];
+  const deadline = Date.now() + timeoutMs;
   for (const delay of delays) {
-    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    if (delay)
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(delay, remaining)),
+      );
+    const requestTime = deadline - Date.now();
+    if (requestTime <= 0) break;
+    let timer;
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 8000);
+      timer = setTimeout(
+        () => controller.abort(),
+        Math.min(8000, requestTime),
+      );
       const response = await fetch(`/plat/csrf/?_=${Date.now()}`, {
         credentials: "same-origin",
         cache: "no-store",
         signal: controller.signal,
       });
-      clearTimeout(timer);
       if (!response.ok) continue;
       const data = await response.json().catch(() => ({}));
       const token = csrfToken() || data.csrfToken || "";
@@ -153,8 +164,12 @@ const ensureCsrfToken = async (force = false) => {
       }
     } catch {
       /* tarmoq uzilgan — keyingi urinish */
+    } finally {
+      clearTimeout(timer);
     }
   }
+  if (timeoutMs !== Infinity)
+    throw new Error("Server javobi kechikyapti. Birozdan keyin qayta urinib ko‘ring.");
   return _csrfMemo;
 };
 const serializeSocialState = (db) => {
