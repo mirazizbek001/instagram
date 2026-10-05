@@ -17,8 +17,6 @@ import {
   User,
   Settings,
   RefreshCw,
-  KeyRound,
-  ShieldCheck,
 } from "lucide-react";
 import { AppProvider, useC } from "./context/AppContext";
 import { Auth, PwaInstallButton } from "./components/Shared";
@@ -62,91 +60,6 @@ function PwaUpdatePrompt({ visible }) {
   );
 }
 
-function SaveLoginPrompt({ account, close }) {
-  const [error, setError] = useState("");
-  if (!account) return null;
-  const save = async () => {
-    if (
-      !window.PasswordCredential ||
-      typeof navigator.credentials?.store !== "function"
-    ) {
-      setError(
-        "Bu brauzer parolni to‘g‘ridan-to‘g‘ri saqlashni qo‘llamaydi. Brauzerning password manager sozlamalarini tekshiring.",
-      );
-      return;
-    }
-    try {
-      await navigator.credentials.store(
-        new window.PasswordCredential({
-          id: account.username,
-          password: account.password,
-          name: account.username,
-        }),
-      );
-      close();
-    } catch {
-      setError(
-        "Parol saqlanmadi. Brauzerda parol saqlashga ruxsat berilganini tekshiring.",
-      );
-    }
-  };
-  return (
-    <div className="fixed inset-0 z-[110] grid place-items-center bg-black/60 px-4 py-6 backdrop-blur-sm">
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="save-login-title"
-        className="w-full max-w-[390px] overflow-hidden rounded-3xl border border-white/15 bg-white text-neutral-900 shadow-[0_28px_90px_rgba(0,0,0,.35)] dark:bg-[#101a30] dark:text-white"
-      >
-        <div className="bg-gradient-to-br from-fuchsia-600 via-violet-600 to-sky-500 px-6 pb-7 pt-6 text-white">
-          <div className="mb-5 grid h-14 w-14 place-items-center rounded-2xl bg-white/20 ring-1 ring-white/30">
-            <KeyRound size={27} />
-          </div>
-          <h2 id="save-login-title" className="text-xl font-extrabold">
-            Kirish ma’lumotlarini saqlaymizmi?
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-white/85">
-            Keyingi safar tez kirish uchun akkaunt va parolni brauzerning xavfsiz
-            password manager’ida saqlang.
-          </p>
-        </div>
-        <div className="p-5">
-          <div className="flex items-center gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-3 dark:border-white/10 dark:bg-white/5">
-            <span className="grid h-10 w-10 place-items-center rounded-full bg-violet-500/10 text-violet-600 dark:text-violet-300">
-              <ShieldCheck size={21} />
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-bold">{account.username}</p>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                Parol faqat brauzerda saqlanadi
-              </p>
-            </div>
-          </div>
-          {error && (
-            <p role="alert" className="mt-3 text-sm text-red-500">
-              {error}
-            </p>
-          )}
-          <div className="mt-5 flex gap-3">
-            <button
-              onClick={close}
-              className="flex-1 rounded-xl border border-neutral-200 px-4 py-3 text-sm font-bold transition hover:bg-neutral-100 dark:border-white/15 dark:hover:bg-white/10"
-            >
-              Hozir emas
-            </button>
-            <button
-              onClick={save}
-              className="flex-1 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-violet-600/20 transition hover:brightness-110"
-            >
-              Saqlash
-            </button>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
 function ProfileRoute() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -168,15 +81,12 @@ function MessagesRoute() {
 }
 
 function AppShell() {
-  const { me, A, unreadN, unreadM, accessInfo } = useC();
+  const { me, A, unreadN, unreadM, accessInfo, peer } = useC();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [pwaUpdateReady, setPwaUpdateReady] = useState(false);
-  const [saveLoginAccount, setSaveLoginAccount] = useState(null);
 
   useEffect(() => {
-    const askToSaveLogin = (event) => setSaveLoginAccount(event.detail);
-    window.addEventListener("instakids-save-login", askToSaveLogin);
     const showUpdate = () => setPwaUpdateReady(true);
     if ("serviceWorker" in navigator) {
       window.addEventListener("instakids-update-ready", showUpdate);
@@ -196,7 +106,6 @@ function AppShell() {
     }
     return () => {
       window.removeEventListener("instakids-update-ready", showUpdate);
-      window.removeEventListener("instakids-save-login", askToSaveLogin);
     };
   }, []);
 
@@ -205,10 +114,6 @@ function AppShell() {
       <>
         <Auth A={A} accessInfo={accessInfo} />
         <PwaUpdatePrompt visible={pwaUpdateReady} />
-        <SaveLoginPrompt
-          account={saveLoginAccount}
-          close={() => setSaveLoginAccount(null)}
-        />
       </>
     );
 
@@ -223,7 +128,9 @@ function AppShell() {
     ...(isAdmin ? [["/admin", Settings, "Admin"]] : []),
   ];
 
-  const conversationOpen = /^\/messages\/[^/]+$/.test(pathname);
+  const conversationOpen =
+    /^\/messages\/[^/]+$/.test(pathname) ||
+    (pathname === "/messages" && Boolean(peer));
   const active = pathname.startsWith("/profile/")
     ? "/profile/" + me.id
     : pathname;
@@ -352,10 +259,6 @@ function AppShell() {
       <CallOverlay />
       <Modals />
       <PwaUpdatePrompt visible={pwaUpdateReady} />
-      <SaveLoginPrompt
-        account={saveLoginAccount}
-        close={() => setSaveLoginAccount(null)}
-      />
     </div>
   );
 }

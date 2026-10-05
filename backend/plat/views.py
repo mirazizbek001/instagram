@@ -615,10 +615,13 @@ def _social_state_impl(request):
 	state, _ = SocialState.objects.get_or_create(pk=1)
 	payload = state.payload or {}
 	username = request.user.username
-	keys = ('posts', 'reels', 'stories', 'seenStories', 'follows', 'messages', 'deletedMessages', 'notifs', 'saved')
+	keys = ('profiles', 'posts', 'reels', 'stories', 'seenStories', 'follows', 'messages', 'deletedMessages', 'notifs', 'saved')
 
 	if request.method == 'GET':
-		response_data = {key: payload.get(key, [] if key != 'saved' else {}) for key in keys}
+		response_data = {
+			key: payload.get(key, {} if key in ('profiles', 'saved') else [])
+			for key in keys
+		}
 		hidden_chats = [chat for chat in payload.get('hiddenChats', []) if chat.get('owner') == username]
 		cutoffs = {chat.get('peer'): chat.get('cutoff', 0) for chat in hidden_chats}
 		hidden_message_ids = {str(message_id) for chat in hidden_chats for message_id in chat.get('messageIds', [])}
@@ -672,6 +675,26 @@ def _social_state_impl(request):
 	sanitized_messages = []
 	blocked_messages = []
 	restriction = _active_restriction(request.user)
+
+	incoming_profiles = incoming.get('profiles', {})
+	if not isinstance(incoming_profiles, dict):
+		return Response({'error': 'profiles obyekti noto‘g‘ri'}, status=status.HTTP_400_BAD_REQUEST)
+	profile = incoming_profiles.get(username)
+	if profile is not None:
+		if not isinstance(profile, dict):
+			return Response({'error': 'Profil ma’lumoti noto‘g‘ri'}, status=status.HTTP_400_BAD_REQUEST)
+		for field, limit in (('name', 150), ('bio', 500)):
+			value = profile.get(field, '')
+			if not isinstance(value, str) or len(value) > limit:
+				return Response({'error': f'Profil {field} maydoni noto‘g‘ri'}, status=status.HTTP_400_BAD_REQUEST)
+			error = validate_text(value, 'Profil')
+			if error:
+				return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+		avatar = profile.get('avatar')
+		if avatar:
+			error = validate_media_item({'media': avatar}, check_caption=False)
+			if error:
+				return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
 
 	# Server-side 7+ moderation. Only content owned/created by the authenticated user
 	# is inspected here; remote content belonging to other users is not rewritten.
@@ -826,6 +849,16 @@ def _social_state_impl(request):
 	if isinstance(incoming_saved, dict):
 		saved[username] = incoming_saved.get(username, [])
 	payload['saved'] = saved
+	if profile is not None:
+		profiles = payload.get('profiles', {})
+		if not isinstance(profiles, dict):
+			profiles = {}
+		profiles[username] = {
+			'name': profile.get('name', ''),
+			'bio': profile.get('bio', ''),
+			'avatar': profile.get('avatar'),
+		}
+		payload['profiles'] = profiles
 	state.payload = payload
 	state.save(update_fields=['payload', 'updated_at'])
 	response = Response({'saved': True, 'moderation': moderation_items, 'rejectedMedia': rejected_media, 'sanitizedMessages': sanitized_messages, 'blockedMessages': blocked_messages})

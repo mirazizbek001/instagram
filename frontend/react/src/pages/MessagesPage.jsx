@@ -244,10 +244,7 @@ function Messages({ peer, setPeer }) {
     const height = viewport?.height || window.innerHeight;
     return {
       height,
-      keyboardInset: Math.max(
-        0,
-        window.innerHeight - height - (viewport?.offsetTop || 0),
-      ),
+      offsetTop: viewport?.offsetTop || 0,
     };
   });
   const restricted = Boolean(accessInfo.restriction?.active);
@@ -257,10 +254,7 @@ function Messages({ peer, setPeer }) {
       const height = viewport?.height || window.innerHeight;
       setViewportMetrics({
         height,
-        keyboardInset: Math.max(
-          0,
-          window.innerHeight - height - (viewport?.offsetTop || 0),
-        ),
+        offsetTop: viewport?.offsetTop || 0,
       });
     };
     window.visualViewport?.addEventListener("resize", updateViewportHeight);
@@ -577,7 +571,7 @@ function Messages({ peer, setPeer }) {
     <div
       style={{
         "--message-viewport-height": `${viewportMetrics.height}px`,
-        "--message-keyboard-inset": `${viewportMetrics.keyboardInset}px`,
+        "--message-viewport-top": `${viewportMetrics.offsetTop}px`,
       }}
       className="message-page mx-auto flex w-full overflow-hidden border-neutral-200 bg-white dark:border-[#1d2a45] dark:bg-[#0b1224] md:h-dvh md:border-x"
     >
@@ -723,7 +717,7 @@ function Messages({ peer, setPeer }) {
                     {pu.name || pu.username}
                   </b>
                   <span
-                    className={`block truncate text-xs ${peerPresence?.online && !conversationBlocked ? "font-semibold text-sky-600 dark:text-sky-300" : "text-neutral-500"}`}
+                    className={`block whitespace-normal break-words text-xs leading-4 ${peerPresence?.online && !conversationBlocked ? "font-semibold text-sky-600 dark:text-sky-300" : "text-neutral-500"}`}
                   >
                     {conversationBlocked
                       ? blockedByMe(peer)

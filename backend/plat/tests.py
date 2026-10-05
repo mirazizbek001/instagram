@@ -306,6 +306,34 @@ class RegistrationTests(APITestCase):
 		response = self.client.get('/plat/social/')
 		self.assertEqual([message['id'] for message in response.data['messages']], ['m1'])
 
+	def test_social_profiles_persist_across_accounts_without_allowing_profile_spoofing(self):
+		owner = User.objects.create_user(username='owner', password='password123')
+		other = User.objects.create_user(username='other', password='password123')
+		self.client.force_login(owner)
+		response = self.client.put('/plat/social/', {
+			'profiles': {
+				'owner': {'name': 'Owner Name', 'bio': 'My bio', 'avatar': None},
+			},
+		}, format='json')
+		self.assertEqual(response.status_code, 200)
+
+		self.client.force_login(other)
+		response = self.client.put('/plat/social/', {
+			'profiles': {
+				'owner': {'name': 'Spoofed Name', 'bio': 'Spoofed', 'avatar': None},
+				'other': {'name': 'Other Name', 'bio': '', 'avatar': None},
+			},
+		}, format='json')
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(
+			SocialState.objects.get(pk=1).payload['profiles']['owner']['name'],
+			'Owner Name',
+		)
+		self.assertEqual(
+			self.client.get('/plat/social/').data['profiles']['owner']['bio'],
+			'My bio',
+		)
+
 	def test_social_state_keeps_other_posts_and_merges_only_current_users_interactions(self):
 		owner = User.objects.create_user(username='owner', password='password123')
 		self.client.force_login(owner)

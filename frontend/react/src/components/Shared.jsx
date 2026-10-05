@@ -7,7 +7,6 @@ import {
   Heart,
   Home,
   ImagePlus,
-  KeyRound,
   LogOut,
   MessageCircle,
   Moon,
@@ -373,10 +372,25 @@ export function PwaInstallButton({ compact = false, iconOnly = false }) {
 }
 
 /* ---------- auth ---------- */
+const REMEMBERED_USERNAME_KEY = "ig_last_username";
+const readRememberedUsername = () => {
+  try {
+    return localStorage.getItem(REMEMBERED_USERNAME_KEY) || "";
+  } catch {
+    return "";
+  }
+};
+const rememberUsername = (username) => {
+  try {
+    localStorage.setItem(REMEMBERED_USERNAME_KEY, username);
+  } catch {
+    /* The login form remains usable if storage is unavailable. */
+  }
+};
 function Auth({ A, accessInfo }) {
   const [reg, setReg] = useState(false);
   const [f, setF] = useState({
-    username: "",
+    username: readRememberedUsername(),
     email: "",
     name: "",
     password: "",
@@ -430,14 +444,7 @@ function Auth({ A, accessInfo }) {
           );
           return;
         }
-        window.dispatchEvent(
-          new CustomEvent("instakids-save-login", {
-            detail: {
-              username: String(f.username || "").trim().toLowerCase(),
-              password: f.password,
-            },
-          }),
-        );
+        rememberUsername(String(f.username || "").trim().toLowerCase());
         A.login(f, result);
       } catch {
         setErr(
@@ -462,14 +469,7 @@ function Auth({ A, accessInfo }) {
         );
         return;
       }
-      window.dispatchEvent(
-        new CustomEvent("instakids-save-login", {
-          detail: {
-            username: String(f.username || "").trim().toLowerCase(),
-            password: f.password,
-          },
-        }),
-      );
+      rememberUsername(String(f.username || "").trim().toLowerCase());
       A.register(f, result);
     } catch {
       setErr(
@@ -496,6 +496,7 @@ function Auth({ A, accessInfo }) {
         );
         return;
       }
+      rememberUsername(String(result.username || "").trim().toLowerCase());
       A.login({ username: result.username }, result);
     } catch {
       setErr(
@@ -552,14 +553,13 @@ function Auth({ A, accessInfo }) {
               placeholder="Username"
               autoComplete="username"
               value={f.username}
-              onChange={(e) =>
-                setF({
-                  ...f,
-                  username: e.target.value
-                    .toLowerCase()
-                    .replace(/[^a-z0-9._]/g, ""),
-                })
-              }
+              onChange={(e) => {
+                const username = e.target.value
+                  .toLowerCase()
+                  .replace(/[^a-z0-9._]/g, "");
+                setF({ ...f, username });
+                rememberUsername(username);
+              }}
             />
             {reg && (
               <input
@@ -652,7 +652,7 @@ function PostActions({ p, onComment }) {
     </div>
   );
 }
-function CommentBox({ p, kind = "post", autoFocus = false }) {
+function CommentBox({ p, kind = "post", autoFocus = false, inputRef }) {
   const { A } = useC();
   const [t, setT] = useState("");
   const [em, setEm] = useState(false);
@@ -669,6 +669,7 @@ function CommentBox({ p, kind = "post", autoFocus = false }) {
         <Smile size={24} />
       </button>
       <input
+        ref={inputRef}
         value={t}
         autoFocus={autoFocus}
         maxLength={500}
@@ -781,12 +782,12 @@ function PostCard({ p }) {
           Barcha {p.comments.length} ta izohni ko‘rish
         </button>
       )}
-      <CommentBox p={p} />
     </article>
   );
 }
 function PostModal({ id, close }) {
   const { db, byId, open } = useC();
+  const commentInput = useRef(null);
   const p = db.posts.find((x) => x.id === id);
   if (!p) return null;
   const u = byId(p.userId);
@@ -835,7 +836,10 @@ function PostModal({ id, close }) {
               </p>
             )}
           </div>
-          <PostActions p={p} onComment={() => {}} />
+          <PostActions
+            p={p}
+            onComment={() => commentInput.current?.focus()}
+          />
           {p.likes.length > 0 && (
             <div className="text-sm font-semibold">
               {p.likes.length} ta yoqtirish
@@ -844,7 +848,7 @@ function PostModal({ id, close }) {
           <div className="pb-1 text-[11px] uppercase text-neutral-500">
             {ago(p.t)}
           </div>
-          <CommentBox p={p} />
+          <CommentBox p={p} inputRef={commentInput} />
         </div>
       </div>
     </Modal>
@@ -1613,7 +1617,7 @@ function ReelsCard({ r }) {
   const saved = (db.saved[me.id] || []).includes(r.id);
   const video = useRef(null);
   const bar = useRef(null);
-  useVideoAutoplay(video, muted, setMuted, 0.65, r.id, false);
+  useVideoAutoplay(video, muted, setMuted, 0.65, r.id);
   if (!u) return null;
   const dbl = () => {
     if (!liked) A.like(r.id, "reel");

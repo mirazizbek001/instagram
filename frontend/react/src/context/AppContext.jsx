@@ -161,6 +161,16 @@ const serializeSocialState = (db) => {
   const usersById = new Map(db.users.map((user) => [user.id, user]));
   const username = (id) => usersById.get(id)?.username || id;
   return {
+    profiles: Object.fromEntries(
+      db.users.map((user) => [
+        user.username,
+        {
+          name: user.name || "",
+          bio: user.bio || "",
+          avatar: user.avatar || null,
+        },
+      ]),
+    ),
     posts: db.posts.map((post) => ({
       ...post,
       userId: username(post.userId),
@@ -958,6 +968,13 @@ export function AppProvider({ children }) {
           messageCursorRef.current,
         );
         updateLocalDatabase((d) => {
+          Object.entries(remote.profiles || {}).forEach(([username, profile]) => {
+            const user = d.users.find((item) => item.username === username);
+            if (!user || !profile || typeof profile !== "object") return;
+            user.name = profile.name || user.name;
+            user.bio = profile.bio || "";
+            user.avatar = profile.avatar || null;
+          });
           Object.assign(d, restored);
         });
         setSocialReadyUser(meId);
