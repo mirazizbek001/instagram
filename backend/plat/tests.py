@@ -83,6 +83,24 @@ class RegistrationTests(APITestCase):
 		user = User.objects.get(username='new_user')
 		self.assertTrue(user.check_password('secret123'))
 
+	def test_register_allows_reusing_email_with_a_different_username(self):
+		User.objects.create_user(
+			username='first_account',
+			email='shared@example.com',
+			password='secret123',
+		)
+
+		response = self.client.post('/plat/register/', {
+			'username': 'second_account',
+			'email': 'SHARED@example.com',
+			'name': 'Second Account',
+			'password': 'secret456',
+		}, format='json')
+
+		self.assertEqual(response.status_code, 201)
+		self.assertTrue(User.objects.filter(username='second_account').exists())
+		self.assertEqual(User.objects.filter(email__iexact='shared@example.com').count(), 2)
+
 	def test_register_rejects_duplicate_username(self):
 		User.objects.create_user(username='taken', password='secret123')
 		response = self.client.post('/plat/register/', {
@@ -93,6 +111,19 @@ class RegistrationTests(APITestCase):
 		}, format='json')
 
 		self.assertEqual(response.status_code, 409)
+
+	def test_register_rejects_username_that_only_differs_by_case(self):
+		User.objects.create_user(username='Taken', password='secret123')
+
+		response = self.client.post('/plat/register/', {
+			'username': 'taken',
+			'email': 'different@example.com',
+			'name': 'New User',
+			'password': 'different123',
+		}, format='json')
+
+		self.assertEqual(response.status_code, 409)
+		self.assertEqual(response.data['error'], 'Bu username band')
 
 	def test_register_retry_recovers_existing_account(self):
 		User.objects.create_user(username='existing', password='secret123')

@@ -1,7 +1,7 @@
 import json
 import random
 import uuid
-from django.db import transaction
+from django.db import IntegrityError, transaction
 import re
 import urllib.parse
 import urllib.request
@@ -264,9 +264,7 @@ def register(request):
 		return Response({'error': 'Ismingizni kiriting'}, status=status.HTTP_400_BAD_REQUEST)
 	if len(password) < 4:
 		return Response({'error': 'Parol kamida 4 ta belgi'}, status=status.HTTP_400_BAD_REQUEST)
-	if User.objects.filter(email__iexact=email).exists():
-		return Response({'error': 'Bu email allaqachon ro‘yxatdan o‘tgan'}, status=status.HTTP_409_CONFLICT)
-	existing_user = User.objects.filter(username=username).first()
+	existing_user = User.objects.filter(username__iexact=username).first()
 	if existing_user:
 		if existing_user.check_password(password):
 			if not _is_admin_user(existing_user) and not _usage_status(existing_user, touch=False)['allowed']:
@@ -278,7 +276,11 @@ def register(request):
 	if username == 'admin':
 		return Response({'error': 'Admin akkauntini faqat server administratori yaratishi mumkin.'}, status=status.HTTP_403_FORBIDDEN)
 
-	user = User.objects.create_user(username=username, email=email, first_name=name[:150], password=password)
+	try:
+		with transaction.atomic():
+			user = User.objects.create_user(username=username, email=email, first_name=name[:150], password=password)
+	except IntegrityError:
+		return Response({'error': 'Bu username band'}, status=status.HTTP_409_CONFLICT)
 	UsageState.objects.get_or_create(user=user)
 	auth_login(request._request, user)
 	_record_login(request._request, user)

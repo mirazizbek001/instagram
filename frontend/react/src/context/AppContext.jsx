@@ -1286,12 +1286,6 @@ export function AppProvider({ children }) {
       if (normalizedUsername.length < 3) return "Username kamida 3 ta belgi";
       if (!name.trim()) return "Ismingizni kiriting";
       if (password.length < 4) return "Parol kamida 4 ta belgi";
-      if (
-        dbRef.current.users.some(
-          (u) => u.username.toLowerCase() === normalizedUsername,
-        )
-      )
-        return "Bu username band";
     },
     register: ({ username, email, name }, account) => {
       const normalizedUsername = String(username || "").trim().toLowerCase();
