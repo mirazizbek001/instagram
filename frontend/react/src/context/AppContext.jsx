@@ -261,24 +261,6 @@ const readMedia = (file, max = 1000) =>
     fr.onload = () => r(fr.result);
     fr.readAsDataURL(file);
   });
-const readImg = (file, max = 1000) =>
-  new Promise((r) => {
-    const fr = new FileReader();
-    fr.onload = () => {
-      const im = new Image();
-      im.onload = () => {
-        const k = Math.min(1, max / Math.max(im.width, im.height));
-        const c = document.createElement("canvas");
-        c.width = im.width * k;
-        c.height = im.height * k;
-        c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
-        r(c.toDataURL("image/jpeg", 0.82));
-      };
-      im.src = fr.result;
-    };
-    fr.readAsDataURL(file);
-  });
-
 const KIDS_BLOCKED_TERMS = [
   "fuck",
   "fucking",
@@ -341,22 +323,6 @@ const kidsUnsafeText = (value) => {
     return re.test(normalized) || (term.length >= 4 && compact.includes(term));
   });
 };
-const kidsUnsafeFile = (file) => {
-  if (!file) return "Fayl tanlanmadi.";
-  const allowed = [
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "video/mp4",
-    "video/webm",
-  ];
-  if (!allowed.includes(file.type))
-    return "Faqat JPG, PNG, WEBP, MP4 yoki WEBM fayllar ruxsat etiladi.";
-  if (file.size > 25 * 1024 * 1024) return "Fayl hajmi 25 MB dan oshmasin.";
-  if (kidsUnsafeText(file.name))
-    return "Bu fayl nomi xavfsizlik filtri tomonidan rad etildi.";
-  return "";
-};
 const kidsUnsafeDataUrl = (value) => {
   if (!value || typeof value !== "string") return "Media fayl noto‘g‘ri.";
   if (
@@ -412,11 +378,7 @@ export function AppProvider({ children }) {
   const syncChain = useRef(Promise.resolve());
   const [view, setView] = useState({ n: "home" });
   const [reelId, setReelId] = useState(null);
-  const [createPost, setCreatePost] = useState(false);
   const [postId, setPostId] = useState(null);
-  const [create, setCreate] = useState(false);
-  const [createReel, setCreateReel] = useState(false);
-  const [createStory, setCreateStory] = useState(false);
   const [storyId, setStoryId] = useState(null);
   const [toast, setToast] = useState(null);
   const [peer, setPeer] = useState(null);
@@ -1452,85 +1414,6 @@ export function AppProvider({ children }) {
         const s = d.saved[meId] || [];
         d.saved[meId] = s.includes(id) ? s.filter((x) => x !== id) : [...s, id];
       }),
-    post: (image, caption) => {
-      if (blockRestrictedAction()) return false;
-      const mediaError = kidsUnsafeDataUrl(image);
-      if (mediaError || kidsUnsafeText(caption)) {
-        say(mediaError || "Caption 7+ xavfsizlik filtri tomonidan rad etildi.");
-        return false;
-      }
-      const ok = save((d) => {
-        d.posts.unshift({
-          id: uid(),
-          userId: meId,
-          image,
-          caption,
-          t: Date.now(),
-          likes: [],
-          comments: [],
-        });
-      });
-      if (ok) {
-        say("Post ulashildi ✓");
-        navigate(`/profile/${meId}`);
-      }
-      return ok;
-    },
-    reel: (media, caption) => {
-      if (blockRestrictedAction()) return false;
-      const mediaError = kidsUnsafeDataUrl(media);
-      if (mediaError || kidsUnsafeText(caption)) {
-        say(
-          mediaError ||
-            "Reels matni 7+ xavfsizlik filtri tomonidan rad etildi.",
-        );
-        return false;
-      }
-      const saved = save((d) => {
-        d.reels.unshift({
-          id: uid(),
-          userId: meId,
-          media,
-          type: "video",
-          caption,
-          t: Date.now(),
-          likes: [],
-          comments: [],
-        });
-      });
-      if (!saved) return false;
-      say("Reels ulashildi ✓");
-      navigate("/reels");
-      return true;
-    },
-    story: (media, type = "image", caption = "", sourceReel = false) => {
-      if (blockRestrictedAction()) return false;
-      const mediaError = kidsUnsafeDataUrl(media);
-      if (mediaError || kidsUnsafeText(caption)) {
-        say(
-          mediaError ||
-            "Story matni 7+ xavfsizlik filtri tomonidan rad etildi.",
-        );
-        return false;
-      }
-      const ok = save((d) => {
-        d.stories = d.stories.filter(
-          (s) => !(s.userId === meId && s.t < Date.now() - 864e5),
-        );
-        d.stories.push({
-          id: uid(),
-          userId: meId,
-          media,
-          type,
-          caption,
-          sourceReel,
-          likes: [],
-          t: Date.now(),
-        });
-      });
-      if (ok) say("Story qo‘shildi ✓");
-      return ok;
-    },
     viewStory: (id) => {
       if (
         dbRef.current.seenStories.some(
@@ -2345,8 +2228,6 @@ export function AppProvider({ children }) {
       navigate("/reels");
     },
     story: (id) => setStoryId(id),
-    create: () => setCreate(true),
-    createStory: () => setCreateStory(true),
   };
 
   return (
@@ -2373,16 +2254,8 @@ export function AppProvider({ children }) {
         callLocalStream,
         callRemoteStream,
         presenceByUser,
-        createPost,
-        setCreatePost,
         postId,
         setPostId,
-        create,
-        setCreate,
-        createReel,
-        setCreateReel,
-        createStory,
-        setCreateStory,
         storyId,
         setStoryId,
       }}
@@ -2404,9 +2277,7 @@ export {
   hm,
   seg,
   readMedia,
-  readImg,
   kidsUnsafeText,
-  kidsUnsafeFile,
   kidsUnsafeDataUrl,
   isKidsHours,
   kidsHoursMessage,

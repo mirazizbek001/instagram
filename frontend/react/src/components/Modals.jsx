@@ -1,12 +1,5 @@
 import { useC } from "../context/AppContext";
-import {
-  PostModal,
-  StoryViewer,
-  Create,
-  CreateChooser,
-  CreateReel,
-  CreateStory,
-} from "./Shared";
+import { PostModal, StoryViewer } from "./Shared";
 import { Clock3 } from "lucide-react";
 
 export default function Modals() {
@@ -19,14 +12,6 @@ export default function Modals() {
     setPostId,
     storyId,
     setStoryId,
-    createPost,
-    setCreatePost,
-    create,
-    setCreate,
-    createReel,
-    setCreateReel,
-    createStory,
-    setCreateStory,
   } = useC();
   const now = Date.now();
   const closedForCooldown = accessInfo?.reason === "cooldown";
@@ -95,26 +80,6 @@ export default function Modals() {
             />
           );
         })()}
-      {createPost && <Create close={() => setCreatePost(false)} />}
-      {create && (
-        <CreateChooser
-          close={() => setCreate(false)}
-          post={() => {
-            setCreate(false);
-            setCreatePost(true);
-          }}
-          reel={() => {
-            setCreate(false);
-            setCreateReel(true);
-          }}
-          story={() => {
-            setCreate(false);
-            setCreateStory(true);
-          }}
-        />
-      )}
-      {createReel && <CreateReel close={() => setCreateReel(false)} />}
-      {createStory && <CreateStory close={() => setCreateStory(false)} />}
       {toast && (
         <div
           role="status"

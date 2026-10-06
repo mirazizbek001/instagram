@@ -443,24 +443,30 @@ class RegistrationTests(APITestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data['seenStories'], [{'viewerId': 'viewer', 'storyId': 'story-1'}])
 
-	def test_owner_can_upload_and_retrieve_a_story(self):
+	def test_existing_story_is_retrieved_and_new_story_is_rejected(self):
 		owner = User.objects.create_user(username='story_uploader', password='password123')
-		self.client.force_login(owner)
 		image = base64.b64encode(b'\x89PNG\r\n\x1a\n').decode('ascii')
 		story = {
-			'id': 'uploaded-story',
+			'id': 'existing-story',
 			'userId': owner.username,
 			'media': f'data:image/png;base64,{image}',
 			'type': 'image',
 			'caption': 'Salom',
 			'likes': [],
+			'comments': [],
 		}
+		SocialState.objects.create(payload={'stories': [story]})
+		self.client.force_login(owner)
 
 		response = self.client.put('/plat/social/', {'stories': [story]}, format='json')
-
 		self.assertEqual(response.status_code, 200)
 		response = self.client.get('/plat/social/')
 		self.assertEqual(response.data['stories'], [story])
+		new_story = {**story, 'id': 'new-story'}
+		response = self.client.put('/plat/social/', {'stories': [story, new_story]}, format='json')
+
+		self.assertEqual(response.status_code, 403)
+		self.assertEqual(SocialState.objects.get(pk=1).payload['stories'], [story])
 
 	def test_story_like_and_view_are_visible_to_owner_and_survive_owner_sync(self):
 		owner = User.objects.create_user(username='story_owner', password='password123')
@@ -542,19 +548,18 @@ class RegistrationTests(APITestCase):
 		self.assertTrue(response.data['messages'][0]['read'])
 		self.assertIn('no-store', response['Cache-Control'])
 
-	def test_reel_video_larger_than_default_request_limit_can_be_published(self):
+	def test_reel_video_upload_is_rejected(self):
 		owner = User.objects.create_user(username='large_reel_creator', password='password123')
 		self.client.force_login(owner)
-		video = base64.b64encode(b'\x00\x00\x00\x18ftypmp42' + b'\x00' * (3 * 1024 * 1024)).decode()
 		response = self.client.put('/plat/social/', {
 			'reels': [{
 				'id': 'large-reel', 'userId': owner.username,
-				'media': f'data:video/mp4;base64,{video}', 'caption': 'Test reel', 'likes': [], 'comments': [],
+				'media': 'data:video/mp4;base64,GkXfo4GB', 'caption': 'Test reel', 'likes': [], 'comments': [],
 			}],
 		}, format='json')
 
-		self.assertEqual(response.status_code, 200)
-		self.assertEqual(SocialState.objects.get(pk=1).payload['reels'][0]['id'], 'large-reel')
+		self.assertEqual(response.status_code, 403)
+		self.assertFalse(SocialState.objects.get(pk=1).payload.get('reels'))
 
 	def test_adult_post_is_rejected_without_admin_review(self):
 		owner = User.objects.create_user(username='creator', password='password123')
@@ -582,10 +587,9 @@ class RegistrationTests(APITestCase):
 		self.assertFalse(SocialState.objects.get(pk=1).payload.get('messages'))
 		self.assertEqual(self.client.get('/plat/moderation/').status_code, 403)
 
-	def test_chat_video_is_delivered_to_recipient_without_admin_review(self):
+	def test_chat_video_upload_is_rejected(self):
 		sender = User.objects.create_user(username='sender', password='password123')
-		receiver = User.objects.create_user(username='receiver', password='password123')
-		admin = User.objects.create_superuser(username='admin', email='admin@example.com', password='password123')
+		User.objects.create_user(username='receiver', password='password123')
 		video_data = 'data:video/webm;base64,GkXfo4GB'
 		self.client.force_login(sender)
 		response = self.client.put('/plat/social/', {
@@ -595,34 +599,23 @@ class RegistrationTests(APITestCase):
 			}],
 		}, format='json')
 
-		self.assertEqual(response.status_code, 200)
-		self.assertEqual(response.data['moderation'], [])
-		self.assertEqual(SocialState.objects.get(pk=1).payload['messages'][0]['to'], receiver.username)
-		self.client.force_login(receiver)
-		self.assertEqual(self.client.get('/plat/social/').data['messages'][0]['src'], video_data)
-		self.client.force_login(admin)
-		self.assertEqual(self.client.get('/plat/moderation/').data, [])
+		self.assertEqual(response.status_code, 403)
+		self.assertFalse(SocialState.objects.get(pk=1).payload.get('messages'))
 
-	def test_chat_images_are_delivered_and_adult_text_is_removed_not_queued(self):
+	def test_chat_image_upload_is_rejected(self):
 		sender = User.objects.create_user(username='image_sender', password='password123')
-		receiver = User.objects.create_user(username='image_receiver', password='password123')
+		User.objects.create_user(username='image_receiver', password='password123')
 		image_data = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jg5kAAAAASUVORK5CYII='
 		self.client.force_login(sender)
 		response = self.client.put('/plat/social/', {
-			'messages': [
-				{'id': 'plain-image', 'from': sender.username, 'to': receiver.username, 'src': image_data, 'mediaType': 'image'},
-				{'id': 'image-with-flagged-text', 'from': sender.username, 'to': receiver.username, 'src': image_data, 'mediaType': 'image', 'text': '18+ content'},
-			],
+			'messages': [{
+				'id': 'plain-image', 'from': sender.username, 'to': 'image_receiver',
+				'src': image_data, 'mediaType': 'image',
+			}],
 		}, format='json')
 
-		self.assertEqual(response.status_code, 200)
-		self.assertEqual(response.data['moderation'], [])
-		self.assertEqual(response.data['sanitizedMessages'], ['image-with-flagged-text'])
-		self.client.force_login(receiver)
-		received = {message['id']: message for message in self.client.get('/plat/social/').data['messages']}
-		self.assertEqual(received['plain-image']['src'], image_data)
-		self.assertEqual(received['image-with-flagged-text']['src'], image_data)
-		self.assertEqual(received['image-with-flagged-text']['text'], '')
+		self.assertEqual(response.status_code, 403)
+		self.assertFalse(SocialState.objects.get(pk=1).payload.get('messages'))
 
 	def test_fast_social_actions_deliver_follow_and_message_updates(self):
 		sender = User.objects.create_user(username='fast_sender', password='password123')
@@ -849,34 +842,129 @@ class RegistrationTests(APITestCase):
 		self.assertIsNotNone(offline_status['lastSeen'])
 		self.assertEqual(UserPresence.objects.count(), 2)
 
-	def test_new_image_post_is_published_without_admin_review(self):
+	def test_social_state_rejects_new_media_without_changing_existing_media(self):
 		owner = User.objects.create_user(username='creator', password='password123')
-		self.client.force_login(owner)
-		response = self.client.put('/plat/social/', {
+		existing = {
 			'posts': [{
-				'id': 'image-post', 'userId': 'creator',
+				'id': 'old-post', 'userId': 'creator',
 				'image': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jg5kAAAAASUVORK5CYII=',
-				'caption': 'My photo', 'likes': [], 'comments': [],
+				'caption': 'Existing photo', 'likes': [], 'comments': [],
+			}],
+			'reels': [{
+				'id': 'old-reel', 'userId': 'creator',
+				'media': 'data:video/webm;base64,GkXfo4GB', 'type': 'video',
+				'caption': 'Existing video', 'likes': [], 'comments': [],
+			}],
+			'stories': [{
+				'id': 'old-story', 'userId': 'creator',
+				'media': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jg5kAAAAASUVORK5CYII=',
+				'type': 'image', 'caption': '', 'likes': [],
+				'comments': [],
+			}],
+		}
+		SocialState.objects.create(payload=existing)
+		self.client.force_login(owner)
+
+		response = self.client.put('/plat/social/', existing, format='json')
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(SocialState.objects.get(pk=1).payload['posts'], existing['posts'])
+		self.assertEqual(SocialState.objects.get(pk=1).payload['reels'], existing['reels'])
+		self.assertEqual(SocialState.objects.get(pk=1).payload['stories'], existing['stories'])
+
+		new_post = {
+			'id': 'new-post', 'userId': 'creator',
+			'image': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jg5kAAAAASUVORK5CYII=',
+			'caption': 'New photo', 'likes': [], 'comments': [],
+		}
+		for key, item in (
+			('posts', new_post),
+			('reels', {'id': 'new-reel', 'userId': 'creator', 'media': 'data:video/webm;base64,GkXfo4GB'}),
+			('stories', {'id': 'new-story', 'userId': 'creator', 'media': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jg5kAAAAASUVORK5CYII='}),
+		):
+			with self.subTest(key=key):
+				response = self.client.put('/plat/social/', {key: [*existing[key], item]}, format='json')
+				self.assertEqual(response.status_code, 403)
+				self.assertFalse(any(
+					saved_item['id'] == item['id']
+					for saved_item in SocialState.objects.get(pk=1).payload[key]
+				))
+
+	def test_fast_action_rejects_image_video_messages_but_keeps_text_and_voice(self):
+		owner = User.objects.create_user(username='creator', password='password123')
+		User.objects.create_user(username='receiver', password='password123')
+		self.client.force_login(owner)
+
+		for media_type, src in (
+			('image', 'data:image/png;base64,aGVsbG8='),
+			('video', 'data:video/webm;base64,GkXfo4GB'),
+		):
+			with self.subTest(media_type=media_type):
+				response = self.client.post('/plat/social/fast/', {
+					'action': 'message',
+					'message': {
+						'id': f'{media_type}-message', 'to': 'receiver',
+						'src': src, 'mediaType': media_type,
+					},
+				}, format='json')
+				self.assertEqual(response.status_code, 403)
+
+		text_response = self.client.post('/plat/social/fast/', {
+			'action': 'message',
+			'message': {'id': 'text-message', 'to': 'receiver', 'text': 'Hello'},
+		}, format='json')
+		voice_response = self.client.post('/plat/social/fast/', {
+			'action': 'message',
+			'message': {
+				'id': 'voice-message', 'to': 'receiver',
+				'src': 'data:audio/webm;base64,GkXfo4GB', 'mediaType': 'audio',
+			},
+		}, format='json')
+
+		self.assertEqual(text_response.status_code, 200)
+		self.assertEqual(voice_response.status_code, 200)
+		self.assertEqual(
+			[item['id'] for item in SocialState.objects.get(pk=1).payload['messages']],
+			['text-message', 'voice-message'],
+		)
+
+	def test_social_state_rejects_new_profile_avatar_and_image_video_messages(self):
+		owner = User.objects.create_user(username='creator', password='password123')
+		User.objects.create_user(username='receiver', password='password123')
+		SocialState.objects.create(payload={
+			'profiles': {'creator': {'name': 'Creator', 'bio': '', 'avatar': None}},
+			'messages': [],
+		})
+		self.client.force_login(owner)
+
+		avatar_response = self.client.put('/plat/social/', {
+			'profiles': {
+				'creator': {
+					'name': 'Creator', 'bio': '',
+					'avatar': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jg5kAAAAASUVORK5CYII=',
+				},
+			},
+		}, format='json')
+		message_response = self.client.put('/plat/social/', {
+			'messages': [{
+				'id': 'uploaded-image', 'from': 'creator', 'to': 'receiver',
+				'text': '', 'src': 'data:image/png;base64,aGVsbG8=', 'mediaType': 'image',
 			}],
 		}, format='json')
 
-		self.assertEqual(response.status_code, 200)
-		self.assertEqual(response.data['moderation'], [])
-		self.assertIn('data:image/png', SocialState.objects.get(pk=1).payload['posts'][0]['image'])
-		self.assertFalse(ModerationReport.objects.filter(content_id='image-post').exists())
+		self.assertEqual(avatar_response.status_code, 403)
+		self.assertEqual(message_response.status_code, 403)
+		state = SocialState.objects.get(pk=1).payload
+		self.assertIsNone(state['profiles']['creator']['avatar'])
+		self.assertEqual(state['messages'], [])
 
 	def test_admin_can_restrict_media_uploader_and_server_blocks_actions(self):
 		owner = User.objects.create_user(username='creator', password='password123')
 		admin = User.objects.create_superuser(username='admin', email='admin@example.com', password='password123')
 		User.objects.create_user(username='receiver', password='password123')
-		self.client.force_login(owner)
-		response = self.client.put('/plat/social/', {
-			'reels': [{
-				'id': 'review-reel', 'userId': 'creator', 'media': 'data:video/webm;base64,GkXfo4GB',
-				'caption': 'Trip', 'likes': [],
-			}],
-		}, format='json')
-		self.assertEqual(response.status_code, 200)
+		SocialState.objects.create(payload={'reels': [{
+			'id': 'review-reel', 'userId': 'creator', 'media': 'data:video/webm;base64,GkXfo4GB',
+			'caption': 'Trip', 'likes': [],
+		}]})
 		self.client.force_login(User.objects.get(username='receiver'))
 		response = self.client.post('/plat/reels/review-reel/report/', {'reason': 'other'}, format='json')
 		self.assertEqual(response.status_code, 201)

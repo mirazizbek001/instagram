@@ -11,7 +11,6 @@ import {
   Moon,
   MoreHorizontal,
   Pencil,
-  PlusSquare,
   Search,
   Send,
   Share2,
@@ -120,14 +119,6 @@ function Profile({ id, goChat }) {
             <h1 className="text-xl font-normal">{u.username}</h1>
             {own && (
               <div className="ml-auto flex shrink-0 items-center gap-2">
-                <button
-                  onClick={open.create}
-                  aria-label="Post qo‘shish"
-                  title="Post qo‘shish"
-                  className="p-1"
-                >
-                  <PlusSquare size={22} />
-                </button>
                 <div className="relative">
                   <button
                     aria-label="Sozlamalar"
@@ -288,33 +279,21 @@ function Profile({ id, goChat }) {
           </button>
         </div>
       )}
-      {(own || ownStories.length > 0) && (
+      {ownStories.length > 0 && (
         <div className="mt-8 flex min-h-[126px] items-start gap-8 sm:mt-10 sm:pl-4">
           <button
-            onClick={() =>
-              ownStories.length
-                ? open.story(ownStories[0].id)
-                : open.createStory()
-            }
+            onClick={() => open.story(ownStories[0].id)}
             className="flex w-[76px] shrink-0 flex-col items-center gap-2 text-xs"
           >
             <span
               className={`grid h-[76px] w-[76px] place-items-center rounded-full ${ownStories.length ? "story-ring" : "border-[3px] border-neutral-200 dark:border-[#26292d]"}`}
             >
               <span className="grid h-[66px] w-[66px] place-items-center rounded-full bg-neutral-100 dark:bg-[#17191c]">
-                {ownStories.length ? (
-                  <Av u={u} s={60} />
-                ) : (
-                  <Plus
-                    size={34}
-                    strokeWidth={1.5}
-                    className="text-neutral-500"
-                  />
-                )}
+                <Av u={u} s={60} />
               </span>
             </span>
             <span className="font-semibold">
-              {ownStories.length ? "Story" : "Yangi"}
+              Story
             </span>
           </button>
         </div>

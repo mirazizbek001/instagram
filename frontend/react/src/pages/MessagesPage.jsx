@@ -4,7 +4,6 @@ import {
   Compass,
   Heart,
   Home,
-  ImagePlus,
   KeyRound,
   LogOut,
   MessageCircle,
@@ -38,10 +37,8 @@ import {
 } from "lucide-react";
 import {
   useC,
-  kidsUnsafeFile,
   kidsUnsafeText,
   readMedia,
-  readImg,
   ago,
   hm,
   seg,
@@ -1115,38 +1112,6 @@ function Messages({ peer, setPeer }) {
                       }
                       className="min-w-0 flex-1 bg-transparent px-2 text-sm outline-none disabled:opacity-50"
                     />
-                    {!editingMessage && (
-                      <label
-                        title={
-                          restricted
-                            ? "Admin cheklovi faol"
-                            : conversationBlocked
-                              ? "Chat bloklangan"
-                              : `Rasm yoki video yuborish: ${pu.username}`
-                        }
-                        className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${restricted || conversationBlocked ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800"}`}
-                      >
-                        <ImagePlus size={21} />
-                        <input
-                          type="file"
-                          accept="image/*,video/*"
-                          disabled={restricted || conversationBlocked}
-                          className="hidden"
-                          onChange={async (event) => {
-                            const file = event.target.files?.[0];
-                            if (!file) return;
-                            const video = file.type.startsWith("video/");
-                            A.send(peer, {
-                              src: video
-                                ? await readMedia(file)
-                                : await readImg(file, 800),
-                              mediaType: video ? "video" : "image",
-                            });
-                            event.target.value = "";
-                          }}
-                        />
-                      </label>
-                    )}
                     <button
                       onClick={send}
                       disabled={restricted || conversationBlocked || !t.trim()}

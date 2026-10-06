@@ -34,10 +34,8 @@ import {
 } from "lucide-react";
 import {
   useC,
-  kidsUnsafeFile,
   kidsUnsafeText,
   readMedia,
-  readImg,
   ago,
   hm,
   seg,

@@ -104,6 +104,13 @@ def _users_block_each_other(first, second):
 	).exists()
 
 
+def _has_image_or_video_upload(item):
+	if item.get('mediaType') in ('image', 'video'):
+		return True
+	src = item.get('src')
+	return isinstance(src, str) and src.startswith(('data:image/', 'data:video/'))
+
+
 def _queue_moderation(user, content_type, item, reason):
 	content_id = str(item.get('id') or timezone.now().timestamp())
 	item['id'] = content_id
@@ -552,6 +559,8 @@ def social_fast_action(request):
 			if not isinstance(message, dict):
 				return Response({'error': 'Xabar ma’lumoti noto‘g‘ri.'}, status=status.HTTP_400_BAD_REQUEST)
 			message = dict(message)
+			if action == 'message' and _has_image_or_video_upload(message):
+				return Response({'error': 'Rasm va video yuborish o‘chirilgan.'}, status=status.HTTP_403_FORBIDDEN)
 			if action == 'call-log':
 				call_event = message.get('callEvent')
 				if not isinstance(call_event, dict) or call_event.get('mode') not in ('audio', 'video') or call_event.get('status') not in ('ended', 'declined', 'missed', 'failed'):
@@ -692,7 +701,12 @@ def _social_state_impl(request):
 			error = validate_text(value, 'Profil')
 			if error:
 				return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
-		avatar = profile.get('avatar')
+		stored_profiles = payload.get('profiles')
+		stored_profile = stored_profiles.get(username, {}) if isinstance(stored_profiles, dict) else {}
+		stored_avatar = stored_profile.get('avatar')
+		avatar = profile.get('avatar', stored_avatar)
+		if avatar != stored_avatar:
+			return Response({'error': 'Profil rasmini almashtirish o‘chirilgan.'}, status=status.HTTP_403_FORBIDDEN)
 		if avatar:
 			error = validate_media_item({'media': avatar}, check_caption=False)
 			if error:
@@ -705,14 +719,22 @@ def _social_state_impl(request):
 		if not isinstance(items, list):
 			return Response({'error': f'{key} ro‘yxat bo‘lishi kerak'}, status=status.HTTP_400_BAD_REQUEST)
 		filtered_items = []
-		existing_ids = {str(item.get('id')) for item in payload.get(key, [])}
+		existing_items = {str(item.get('id')): item for item in payload.get(key, [])}
 		for item in items:
 			if item.get('userId') == username:
+				old_item = existing_items.get(str(item.get('id')))
+				new_item = old_item is None
+				if (key in ('reels', 'stories') and new_item) or (
+					key == 'posts' and new_item and (item.get('image') or item.get('media'))
+				):
+					return Response({'error': 'Yangi rasm, video, story yoki Reels ulashish o‘chirilgan.'}, status=status.HTTP_403_FORBIDDEN)
+				media_field = 'image' if key == 'posts' else 'media'
+				if old_item and item.get(media_field) != old_item.get(media_field):
+					return Response({'error': 'Post, story yoki Reels mediasini almashtirish o‘chirilgan.'}, status=status.HTTP_403_FORBIDDEN)
 				adult_caption = suspected_adult_text(item.get('caption', ''))
 				error = validate_media_item(item, check_caption=not adult_caption)
 				if error:
 					return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
-				new_item = str(item.get('id')) not in existing_ids
 				if new_item and not restriction and adult_caption:
 					rejected_media.append({'type': content_type, 'id': str(item.get('id'))})
 					continue
@@ -744,6 +766,11 @@ def _social_state_impl(request):
 	for message in new_messages:
 		if message.get('from') == username:
 			old_message = existing_messages.get(str(message.get('id')))
+			if _has_image_or_video_upload(message) and (
+				not old_message
+				or any(message.get(field) != old_message.get(field) for field in ('src', 'mediaType'))
+			):
+				return Response({'error': 'Rasm va video yuborish o‘chirilgan.'}, status=status.HTTP_403_FORBIDDEN)
 			adult_message = suspected_adult_text(message.get('text', ''))
 			changed_message = not old_message or any(
 				message.get(field) != old_message.get(field) for field in ('text', 'src', 'mediaType')
@@ -858,7 +885,7 @@ def _social_state_impl(request):
 		profiles[username] = {
 			'name': profile.get('name', ''),
 			'bio': profile.get('bio', ''),
-			'avatar': profile.get('avatar'),
+			'avatar': profile.get('avatar', stored_avatar),
 		}
 		payload['profiles'] = profiles
 	state.payload = payload

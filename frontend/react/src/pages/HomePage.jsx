@@ -1,4 +1,4 @@
-import { Compass, Plus } from "lucide-react";
+import { Compass } from "lucide-react";
 import { useC } from "../context/AppContext";
 import { Av, FollowBtn, PostCard, HomeReelCard } from "../components/Shared";
 
@@ -20,7 +20,7 @@ function HomePage() {
       .map((f) => db.users.find((u) => u.id === f.b))
       .filter(Boolean),
   ].filter(
-    (u) => u.id === me.id || activeStories.some((s) => s.userId === u.id),
+    (u) => activeStories.some((s) => s.userId === u.id),
   );
   return (
     <div className="mx-auto flex max-w-[935px] justify-center gap-16 px-0 pt-2 sm:px-3 lg:pt-5">
@@ -43,9 +43,7 @@ function HomePage() {
                   >
                     <button
                       type="button"
-                      onClick={() =>
-                        us.length ? open.story(us[0].id) : open.createStory()
-                      }
+                      onClick={() => us.length && open.story(us[0].id)}
                       className="flex w-full flex-col items-center gap-1"
                     >
                       <Av u={u} s={56} ring={u.id !== me.id && unseen} />
@@ -53,16 +51,6 @@ function HomePage() {
                         {u.id === me.id ? "Sizning" : u.username}
                       </span>
                     </button>
-                    {u.id === me.id && (
-                      <button
-                        type="button"
-                        aria-label="Yangi story qo‘shish"
-                        onClick={open.createStory}
-                        className="absolute right-0 top-7 grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-black text-white dark:border-[#0b1224] dark:bg-white dark:text-black"
-                      >
-                        <Plus size={13} />
-                      </button>
-                    )}
                   </div>
                 );
               })}

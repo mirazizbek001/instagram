@@ -6,13 +6,11 @@ import {
   Flag,
   Heart,
   Home,
-  ImagePlus,
   LogOut,
   MessageCircle,
   Moon,
   MoreHorizontal,
   Pencil,
-  PlusSquare,
   Search,
   Send,
   Share2,
@@ -29,7 +27,6 @@ import {
   Users,
   Volume2,
   VolumeX,
-  Camera,
   Settings,
   Contact,
   Eye,
@@ -37,10 +34,7 @@ import {
 } from "lucide-react";
 import {
   useC,
-  kidsUnsafeFile,
   kidsUnsafeText,
-  readMedia,
-  readImg,
   ago,
   hm,
   seg,
@@ -887,118 +881,6 @@ function PostModal({ id, close }) {
     </Modal>
   );
 }
-function Create({ close }) {
-  const { A } = useC();
-  const [img, setImg] = useState(null);
-  const [cap, setCap] = useState("");
-  const [em, setEm] = useState(false);
-  return (
-    <Modal close={close}>
-      <div className="flex items-center justify-between border-b border-neutral-200 p-3 dark:border-neutral-800">
-        <b className="mx-auto pl-10">Yangi post yaratish</b>
-        {img && (
-          <button
-            onClick={() => {
-              if (A.post(img, cap)) close();
-            }}
-            className="font-semibold text-black dark:text-white"
-          >
-            Ulashish
-          </button>
-        )}
-      </div>
-      {!img ? (
-        <label className="grid h-[420px] cursor-pointer place-items-center text-center">
-          <div>
-            <ImagePlus size={64} strokeWidth={1.2} className="mx-auto" />
-            <div className="mt-4 text-xl">Rasmni tanlang</div>
-            <span className="mt-4 inline-block rounded-lg bg-black dark:bg-white dark:text-black px-4 py-2 text-sm font-semibold text-white">
-              Qurilmadan tanlash
-            </span>
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={async (e) => {
-                const f = e.target.files[0];
-                if (!f) return;
-                const err = kidsUnsafeFile(f);
-                if (err) {
-                  A.toast(err);
-                  return;
-                }
-                setImg(await readImg(f));
-                e.target.value = "";
-              }}
-            />
-          </div>
-        </label>
-      ) : (
-        <div className="relative">
-          <img src={img} alt="" className="max-h-[50vh] w-full object-cover" />
-          <div className="p-3">
-            <textarea
-              value={cap}
-              onChange={(e) => setCap(e.target.value)}
-              placeholder="Izoh yozing..."
-              className="h-24 w-full resize-none bg-transparent text-sm outline-none"
-            />
-            <button onClick={() => setEm(!em)}>
-              <Smile size={22} />
-            </button>
-          </div>
-          {em && (
-            <EmojiPicker
-              onPick={(e) => setCap((v) => v + e)}
-              cls="absolute bottom-14 left-3"
-            />
-          )}
-        </div>
-      )}
-    </Modal>
-  );
-}
-
-function CreateChooser({ close, post, reel }) {
-  return (
-    <Modal close={close}>
-      <div className="create-chooser bg-white p-5 text-neutral-900 dark:bg-[#101a30] dark:text-white">
-        <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-neutral-200 dark:bg-[#38517b]" />
-        <h2 className="text-center text-lg font-bold">Yaratish</h2>
-        <div className="mt-5 grid gap-3">
-          <button
-            onClick={post}
-            className="flex items-center gap-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-left transition hover:scale-[1.01] hover:bg-white dark:border-[#263756] dark:bg-[#17223b] dark:hover:bg-[#1d2d4b]"
-          >
-            <span className="text-amber-500">
-              <ImagePlus />
-            </span>
-            <span>
-              <b className="block">Post</b>
-              <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                Rasm va caption
-              </span>
-            </span>
-          </button>
-          <button
-            onClick={reel}
-            className="flex items-center gap-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-left transition hover:scale-[1.01] hover:bg-white dark:border-[#263756] dark:bg-[#17223b] dark:hover:bg-[#1d2d4b]"
-          >
-            <span className="text-blue-500">
-              <Play />
-            </span>
-            <span>
-              <b className="block">Reels</b>
-              <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                Qisqa video
-              </span>
-            </span>
-          </button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
 function StoryViewer({ story, close, stories }) {
   const { db, me, byId, open, A } = useC();
   const u = byId(story.userId);
@@ -1171,33 +1053,6 @@ function StoryViewer({ story, close, stories }) {
         ) : (
           <div className="absolute bottom-3 left-3 right-3 z-20 flex items-center gap-2">
             <div className="flex h-11 min-w-0 flex-1 items-center gap-1 rounded-full border border-white/60 bg-black/30 pl-2 pr-1">
-              <label
-                title="Video javob yuborish"
-                className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-full"
-              >
-                <ImagePlus size={18} />
-                <input
-                  type="file"
-                  accept="video/*"
-                  className="hidden"
-                  onChange={async (event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) return;
-                    const err = kidsUnsafeFile(file);
-                    if (err) {
-                      A.toast(err);
-                      return;
-                    }
-                    A.send(cu.id, {
-                      src: await readMedia(file),
-                      mediaType: "video",
-                      storyId: current.id,
-                      storyOwner: cu.id,
-                    });
-                    event.target.value = "";
-                  }}
-                />
-              </label>
               <input
                 value={reply}
                 onChange={(event) => setReply(event.target.value)}
@@ -1249,11 +1104,6 @@ function ShareModal({ reel, close }) {
   const [sent, setSent] = useState([]);
   const [sharing, setSharing] = useState(false);
   const friends = db.users.filter((u) => u.id !== me.id);
-  const addStory = () => {
-    A.story(reel.media, reel.type, "", true);
-    close();
-    A.toast("Reels storyga qo‘shildi ✓");
-  };
   const shareToApps = async () => {
     if (sharing) return;
     setSharing(true);
@@ -1287,20 +1137,6 @@ function ShareModal({ reel, close }) {
         Ulashish
       </div>
       <div className="p-4">
-        <button
-          onClick={addStory}
-          className="mb-3 flex w-full items-center gap-3 rounded-xl border p-3 text-left hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
-        >
-          <span className="grid h-11 w-11 place-items-center rounded-full bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 text-white">
-            <Camera size={22} />
-          </span>
-          <span>
-            <b className="block">Storyga qo‘shish</b>
-            <span className="text-xs text-neutral-500">
-              Reelsni storyda ulashing
-            </span>
-          </span>
-        </button>
         <button
           onClick={shareToApps}
           disabled={sharing}
@@ -1605,14 +1441,6 @@ function ReelMenu({ r, size = 24, up = false, showOpen = false }) {
             >
               <User size={16} /> Profilga o‘tish
             </button>
-            {!own && (
-              <button
-                onClick={run(() => A.story(r.media, r.type, "", true))}
-                className={item}
-              >
-                <Plus size={16} /> Storyga qo‘shish
-              </button>
-            )}
             {own ? (
               <button
                 onClick={run(() => {
@@ -1806,149 +1634,6 @@ function ReelsCard({ r }) {
         <ReelComments id={r.id} close={() => setCommentsOpen(false)} />
       )}
     </article>
-  );
-}
-
-function CreateStory({ close }) {
-  const { A } = useC();
-  const [media, setMedia] = useState(null);
-  const [type, setType] = useState("image");
-  const [cap, setCap] = useState("");
-  return (
-    <Modal close={close}>
-      <div className="flex items-center justify-between border-b p-3 dark:border-neutral-800">
-        <b className="mx-auto pl-8">Yangi story</b>
-        {media && (
-          <button
-            onClick={() => {
-              if (A.story(media, type, cap)) close();
-            }}
-            className="font-semibold text-black dark:text-white"
-          >
-            Ulashish
-          </button>
-        )}
-      </div>
-      {!media ? (
-        <label className="grid h-[420px] cursor-pointer place-items-center text-center">
-          <div>
-            <Camera size={58} className="mx-auto" />
-            <div className="mt-4 text-xl">Rasm yoki video tanlang</div>
-            <span className="mt-3 inline-block rounded-lg bg-black dark:bg-white dark:text-black px-4 py-2 text-sm font-semibold text-white">
-              Qurilmadan tanlash
-            </span>
-            <input
-              type="file"
-              accept="image/*,video/*"
-              className="hidden"
-              onChange={async (e) => {
-                const f = e.target.files?.[0];
-                if (f) {
-                  const err = kidsUnsafeFile(f);
-                  if (err) {
-                    A.toast(err);
-                    return;
-                  }
-                  setType(f.type.startsWith("video/") ? "video" : "image");
-                  setMedia(await readMedia(f));
-                  e.target.value = "";
-                }
-              }}
-            />
-          </div>
-        </label>
-      ) : (
-        <div>
-          <div className="bg-black">
-            <img
-              src={type === "image" ? media : ""}
-              className={
-                type === "image"
-                  ? "mx-auto max-h-[55vh] object-contain"
-                  : "hidden"
-              }
-            />
-            {type === "video" && (
-              <video src={media} controls className="mx-auto max-h-[55vh]" />
-            )}
-          </div>
-          <div className="p-4">
-            <textarea
-              value={cap}
-              onChange={(e) => setCap(e.target.value)}
-              placeholder="Storyga yozuv qo‘shing..."
-              className="h-20 w-full resize-none bg-transparent outline-none"
-            />
-          </div>
-        </div>
-      )}
-    </Modal>
-  );
-}
-function CreateReel({ close }) {
-  const { A } = useC();
-  const [media, setMedia] = useState(null);
-  const [cap, setCap] = useState("");
-  return (
-    <Modal close={close}>
-      <div className="flex items-center justify-between border-b p-3 dark:border-neutral-800">
-        <b className="mx-auto pl-8">Yangi Reels</b>
-        {media && (
-          <button
-            onClick={() => {
-              if (A.reel(media, cap)) close();
-            }}
-            className="font-semibold text-black dark:text-white"
-          >
-            Ulashish
-          </button>
-        )}
-      </div>
-      {!media ? (
-        <label className="grid h-[420px] cursor-pointer place-items-center text-center">
-          <div>
-            <Play size={64} className="mx-auto" />
-            <div className="mt-4 text-xl">Reels videosini tanlang</div>
-            <span className="mt-3 inline-block rounded-lg bg-black dark:bg-white dark:text-black px-4 py-2 text-sm font-semibold text-white">
-              Video tanlash
-            </span>
-            <input
-              type="file"
-              accept="video/*"
-              className="hidden"
-              onChange={async (e) => {
-                const f = e.target.files?.[0];
-                if (f) {
-                  const err = kidsUnsafeFile(f);
-                  if (err) {
-                    A.toast(err);
-                    return;
-                  }
-                  setMedia(await readMedia(f));
-                  e.target.value = "";
-                }
-              }}
-            />
-          </div>
-        </label>
-      ) : (
-        <div>
-          <video
-            src={media}
-            controls
-            className="mx-auto max-h-[55vh] bg-black"
-          />
-          <div className="p-4">
-            <textarea
-              value={cap}
-              onChange={(e) => setCap(e.target.value)}
-              placeholder="Reels haqida yozing..."
-              className="h-20 w-full resize-none bg-transparent outline-none"
-            />
-          </div>
-        </div>
-      )}
-    </Modal>
   );
 }
 
@@ -2151,18 +1836,6 @@ function EditProfile({ close }) {
         <h2 className="text-lg font-bold">Profilni tahrirlash</h2>
         <div className="mt-5 flex flex-col items-center">
           <Av u={{ ...me, ...f }} s={90} />
-          <label className="mt-2 cursor-pointer text-sm font-semibold text-black dark:text-white">
-            Rasmni almashtirish
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={async (e) =>
-                e.target.files[0] &&
-                setF({ ...f, avatar: await readImg(e.target.files[0], 300) })
-              }
-            />
-          </label>
         </div>
         <div className="mt-4 space-y-3">
           <label className="block text-sm font-semibold">
@@ -2347,13 +2020,9 @@ export {
   CommentBox,
   PostCard,
   PostModal,
-  Create,
-  CreateChooser,
   StoryViewer,
   ShareModal,
   ReelsCard,
-  CreateStory,
-  CreateReel,
   HomeReelCard,
   Grid,
   EditProfile,
